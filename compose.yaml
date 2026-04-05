@@ -1,0 +1,6 @@
+services:
+  mezzioasync:
+    image: mezzioasync
+    build:
+      context: .
+      dockerfile: ./Dockerfile

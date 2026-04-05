@@ -1,0 +1,78 @@
+{
+    "name": "webware/mezzio-bleeding-edge",
+    "description": "A custom Mezzio skeleton",
+    "license": "BSD-3-Clause",
+    "keywords": [
+        "mezzio",
+        "custom skeleton"
+    ],
+    "authors": [
+        {
+            "name": "Joey Smith",
+            "email": "jsmith@webinertia.net",
+            "homepage": "https://github.com/tyrsson/mezzio-bleeding-edge/discussions",
+            "role": "Developer"
+        }
+    ],
+    "require": {
+        "php": "~8.2.0 || ~8.3.0 || ~8.4.0 || ~8.5.0",
+        "laminas/laminas-component-installer": "^3.7",
+        "laminas/laminas-config-aggregator": "^1.19",
+        "laminas/laminas-diactoros": "^3.8",
+        "laminas/laminas-servicemanager": "^4.5",
+        "laminas/laminas-stdlib": "^3.21",
+        "laminas/laminas-view": "^3.0",
+        "mezzio/mezzio": "^3.26",
+        "mezzio/mezzio-fastroute": "^3.14",
+        "mezzio/mezzio-helpers": "^5.20",
+        "mezzio/mezzio-laminasviewrenderer": "^3.0"
+    },
+    "require-dev": {
+        "phpstan/phpstan": "^2.1",
+        "phpstan/phpstan-phpunit": "^2.0",
+        "phpunit/phpunit": "^11.5.42",
+        "roave/security-advisories": "dev-master",
+        "webware/coding-standard": "^0.1.0",
+        "webware/traccio": "^0.1.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "App\\": "src/App/src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "AppTest\\": "test/AppTest/"
+        }
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true,
+    "config": {
+        "sort-packages": true,
+        "platform": {
+            "php": "8.2.99"
+        },
+        "allow-plugins": {
+            "laminas/laminas-component-installer": true
+        }
+    },
+    "scripts": {
+        "check": [
+            "@cs-check",
+            "@sa",
+            "@test"
+        ],
+        "clear-config-cache": "php bin/clear-config-cache.php",
+        "cs-check": "vendor/bin/php-cs-fixer check",
+        "cs-fix": "vendor/bin/php-cs-fixer fix",
+        "test": "phpunit --colors=always",
+        "test-coverage": "phpunit --colors=always --coverage-clover clover.xml",
+        "sa": "vendor/bin/phpstan analyse --memory-limit=256M",
+        "sa-gen-baseline": "vendor/bin/phpstan analyse --memory-limit=256M --generate-baseline",
+        "sa-verbose": "vendor/bin/phpstan analyse --memory-limit=256M -vv",
+        "serve": [
+            "Composer\\Config::disableProcessTimeout",
+            "php -S 0.0.0.0:8080 -t public/"
+        ]
+    }
+}
