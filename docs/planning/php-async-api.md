@@ -1,7 +1,7 @@
 # TrueAsync (php-async) API Reference
 
 This document summarises the PHP TrueAsync extension API as it applies to `mezzio-async`
-development. Canonical documentation: https://true-async.github.io/en/docs.html
+development. Canonical documentation: [TrueAsync documentation](https://true-async.github.io/en/docs.html)
 
 > **PHP 8.6+ required.** All classes and functions live in the `Async\` namespace unless
 > noted. The extension is identified by `extension_loaded('true_async')`.
