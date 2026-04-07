@@ -14,7 +14,7 @@ TrueAsync implements **transparent asynchrony without coloured functions**. Ther
 `async`/`await` keyword distinction — normal PHP functions become non-blocking automatically
 when called inside a coroutine. A single OS thread runs many coroutines cooperatively.
 
-```
+```text
 Outside a coroutine: standard blocking PHP behaviour (unchanged)
 Inside a coroutine:  I/O calls automatically yield to the scheduler
 ```
@@ -139,6 +139,7 @@ function returns. Use for atomic critical sections (DB transactions, etc.).
 Represents a running or suspended coroutine. Created via `spawn()`.
 
 **Key methods:**
+
 ```php
 $c->getId(): int
 $c->isQueued(): bool
@@ -337,7 +338,7 @@ Watches filesystem paths for changes. Useful for hot-code-reload in development.
 
 ## Exception Hierarchy
 
-```
+```text
 \Cancellation
   └─ Async\AsyncCancellation      — coroutine was cancelled
        └─ Async\OperationCanceledException  — token-triggered cancellation
@@ -365,6 +366,7 @@ Watches filesystem paths for changes. Useful for hot-code-reload in development.
 | `async.debug_deadlock`  | `1`     | PHP_INI_ALL  | Print deadlock diagnostic report on error  |
 
 Disable in production if you want to suppress the verbose report:
+
 ```ini
 async.debug_deadlock = 0
 ```
@@ -376,16 +378,16 @@ async.debug_deadlock = 0
 All functions below yield the current coroutine on I/O and resume when data is available.
 Called outside a coroutine they behave as standard blocking PHP.
 
-| Category          | Functions                                                                       |
-|-------------------|---------------------------------------------------------------------------------|
-| Stream sockets    | `stream_socket_server`, `stream_socket_client`, `stream_socket_accept`, `stream_select` |
+| Category          | Functions                                                                                                                        |
+|-------------------|----------------------------------------------------------------------------------------------------------------------------------|
+| Stream sockets    | `stream_socket_server`, `stream_socket_client`, `stream_socket_accept`, `stream_select`                                          |
 | Raw sockets       | `socket_create`, `socket_connect`, `socket_accept`, `socket_read`, `socket_write`, `socket_send`, `socket_recv`, `socket_select` |
-| File & stream I/O | `fopen`, `fread`, `fwrite`, `fgets`, `file_get_contents`, `file_put_contents`, `stream_get_contents`, `stream_copy_to_stream` |
-| cURL              | `curl_exec`, `curl_multi_exec`, `curl_multi_select`                             |
-| Databases         | `PDO` (MySQL, PgSQL), `mysqli_*`, `pg_*`                                        |
-| DNS               | `gethostbyname`, `gethostbyaddr`, `gethostbynamel`                              |
-| Timers            | `sleep`, `usleep`, `time_nanosleep`, `time_sleep_until`                         |
-| Process           | `proc_open`, `exec`, `shell_exec`                                               |
+| File & stream I/O | `fopen`, `fread`, `fwrite`, `fgets`, `file_get_contents`, `file_put_contents`, `stream_get_contents`, `stream_copy_to_stream`    |
+| cURL              | `curl_exec`, `curl_multi_exec`, `curl_multi_select`                                                                              |
+| Databases         | `PDO` (MySQL, PgSQL), `mysqli_*`, `pg_*`                                                                                         |
+| DNS               | `gethostbyname`, `gethostbyaddr`, `gethostbynamel`                                                                               |
+| Timers            | `sleep`, `usleep`, `time_nanosleep`, `time_sleep_until`                                                                          |
+| Process           | `proc_open`, `exec`, `shell_exec`                                                                                                |
 
 **Not yet async** (metadata ops — block the coroutine briefly, not the whole process):
 `opendir`, `readdir`, `unlink`, `rename`, `mkdir`, `rmdir`, `stat`, `lstat`

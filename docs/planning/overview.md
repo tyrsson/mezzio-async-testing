@@ -29,7 +29,7 @@ HTTP server with a TrueAsync coroutine-per-connection model backed by PHP's nati
 
 ## Architecture at a Glance
 
-```
+```text
 CLI entry (bin/laminas mezzio:async:start)
     │
     └─► AsyncRequestHandlerRunner::run()
@@ -57,27 +57,32 @@ CLI entry (bin/laminas mezzio:async:start)
 ## Key Design Principles
 
 ### 1. Coroutine-per-connection
+
 Each accepted TCP connection is handled inside its own `Async\Coroutine`, spawned inside a
 managed `Async\Scope`. This means hundreds of simultaneous connections run concurrently in a
 single OS thread. All PHP socket/stream functions (`stream_socket_accept`, `fread`, `fwrite`,
 etc.) automatically yield the coroutine to the scheduler when awaiting I/O.
 
 ### 2. Structured Concurrency via Scope
+
 The entire server lifecycle is owned by a root `Async\Scope`. Shutting down the server means
 calling `$serverScope->cancel()` — all in-flight request coroutines receive
 `Async\AsyncCancellation`, can `finally` clean up resources, and then terminate.
 
 ### 3. PSR-14 Events (same pattern as mezzio-swoole)
+
 `AsyncRequestHandlerRunner` dispatches typed PSR-14 events for every server lifecycle moment.
 Each event is handled by registered listeners in the DI container. This keeps the runner thin
 and listener logic composable.
 
 ### 4. No Shared Mutable State in Services
+
 TrueAsync runs all coroutines in a single thread. Shared state in DI services is safe from
 data races but **persists between requests** (same as Swoole). The same stateless-service
 discipline documented in mezzio-swoole applies here. See `docs/planning/components.md` for details.
 
 ### 5. PSR-7 Bridge
+
 Incoming raw HTTP/1.1 bytes are parsed into a `Laminas\Diactoros\ServerRequest`. The outgoing
 PSR-7 `ResponseInterface` is serialised back to raw HTTP/1.1 bytes and written to the socket.
 No third-party HTTP parsing library is assumed — the parser is part of this package.
@@ -86,22 +91,22 @@ No third-party HTTP parsing library is assumed — the parser is part of this pa
 
 ## Runtime Requirements
 
-| Requirement                | Detail                                      |
-|----------------------------|---------------------------------------------|
-| PHP version                | 8.6+                                        |
-| PHP extension              | `true_async` (TrueAsync / php-async)        |
-| Thread safety (ZTS)        | Required by TrueAsync                       |
-| OS                         | Linux / macOS (Windows: limited stream support) |
-| laminas/laminas-diactoros  | PSR-7 implementation                        |
-| mezzio/mezzio              | Application pipeline                        |
-| laminas/laminas-httphandlerrunner | `RequestHandlerRunnerInterface`      |
-| PSR-14 event dispatcher    | e.g., `phly/phly-event-dispatcher`          |
+| Requirement                       | Detail                                          |
+|-----------------------------------|-------------------------------------------------|
+| PHP version                       | 8.6+                                            |
+| PHP extension                     | `true_async` (TrueAsync / php-async)            |
+| Thread safety (ZTS)               | Required by TrueAsync                           |
+| OS                                | Linux / macOS (Windows: limited stream support) |
+| laminas/laminas-diactoros         | PSR-7 implementation                            |
+| mezzio/mezzio                     | Application pipeline                            |
+| laminas/laminas-httphandlerrunner | `RequestHandlerRunnerInterface`                 |
+| PSR-14 event dispatcher           | e.g., `phly/phly-event-dispatcher`              |
 
 ---
 
 ## Package Identity
 
-```
+```text
 Package name : webware/mezzio-async
 Namespace    : Mezzio\Async
 Config key   : mezzio-async
