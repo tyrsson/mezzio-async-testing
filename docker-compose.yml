@@ -1,0 +1,12 @@
+###############################################################################
+#                          Generated on phpdocker.io                          #
+###############################################################################
+services:
+    php:
+        build: docker/php
+        working_dir: /app
+        volumes:
+            - '.:/app'
+        ports:
+            - '80:80'
+        restart: unless-stopped

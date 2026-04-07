@@ -1,5 +1,5 @@
 {
-    "name": "webware/mezzio-bleeding-edge",
+    "name": "webware/mezzio-async",
     "description": "A custom Mezzio skeleton",
     "license": "BSD-3-Clause",
     "keywords": [
@@ -10,12 +10,12 @@
         {
             "name": "Joey Smith",
             "email": "jsmith@webinertia.net",
-            "homepage": "https://github.com/tyrsson/mezzio-bleeding-edge/discussions",
+            "homepage": "https://github.com/tyrsson/mezzio-async/discussions",
             "role": "Developer"
         }
     ],
     "require": {
-        "php": "~8.2.0 || ~8.3.0 || ~8.4.0 || ~8.5.0",
+        "php": "~8.2.0 || ~8.3.0 || ~8.4.0 || ~8.5.0 || ~8.6.0",
         "laminas/laminas-component-installer": "^3.7",
         "laminas/laminas-config-aggregator": "^1.19",
         "laminas/laminas-diactoros": "^3.8",
@@ -49,9 +49,6 @@
     "prefer-stable": true,
     "config": {
         "sort-packages": true,
-        "platform": {
-            "php": "8.2.99"
-        },
         "allow-plugins": {
             "laminas/laminas-component-installer": true
         }
