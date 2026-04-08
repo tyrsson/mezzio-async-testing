@@ -14,6 +14,7 @@ $cacheConfig = [
 ];
 
 $aggregator = new ConfigAggregator([
+    \Phly\EventDispatcher\ConfigProvider::class,
     Laminas\View\ConfigProvider::class,
     Mezzio\LaminasView\ConfigProvider::class,
     Laminas\ServiceManager\ConfigProvider::class,
@@ -25,11 +26,12 @@ $aggregator = new ConfigAggregator([
     Mezzio\ConfigProvider::class,
     Mezzio\Router\ConfigProvider::class,
     Laminas\Diactoros\ConfigProvider::class,
-    class_exists(Webware\Traccio\ConfigProvider::class, )
+    class_exists(Webware\Traccio\ConfigProvider::class,)
         ? Webware\Traccio\ConfigProvider::class
         : function () {
             return [];
         },
+    Mezzio\Async\ConfigProvider::class,
     // Default App module config
     ConfigProvider::class,
     // Load application config in a pre-defined order in such a way that local settings
