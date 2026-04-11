@@ -4,9 +4,11 @@
 services:
     php:
         build: docker/php
-        working_dir: /app
         volumes:
-            - '.:/app'
+            - '.:/var/www/app'
+            - './docker/php/conf.d:/usr/local/etc/php/conf.d'
+        expose:
+            - 80
         ports:
-            - '80:80'
+            - 80:80
         restart: unless-stopped
