@@ -18,9 +18,11 @@ The core server is **working end-to-end**. The following components exist in
 ```
 ConfigProvider.php                 ← DI entry point (CLI-only dependencies)
 Runner/
-  AsyncRunner.php                  ← implements RequestHandlerRunnerInterface
+  AsyncRunner.php                  ← implements RequestHandlerRunnerInterface; handles connections
   AsyncRunnerFactory.php
 Http/
+  Server.php                       ← TCP socket, scheduler entry, Scope, accept loop, signals
+  ServerFactory.php
   RequestParser.php                ← fread-based chunk accumulator → PSR-7
   RequestParserFactory.php
   ResponseEmitter.php              ← fwrite-based HTTP/1.1 serialiser
@@ -44,12 +46,14 @@ Log/
 ## Architecture
 
 - **Single-process, single-thread, many coroutines.** No worker processes, no master/manager.
-- **`AsyncRunner`** is the central server class, implementing `RequestHandlerRunnerInterface`.
+- **`Http\Server`** owns the TCP socket, TrueAsync scheduler entry, `Async\Scope` lifecycle,
+  accept loop, and signal handling. It exposes a single `listen(callable $connectionHandler)` method.
+- **`AsyncRunner`** is a thin Mezzio integration layer. `run()` calls `$this->server->listen($this->handleConnection(...))`. All connection logic (parse, dispatch, emit, log) lives in `handleConnection()`.
 - **`Async\Scope`** owns all connection coroutines. Cancelling the scope shuts the server down.
 - **No FrankenPHP**, no Swoole. The HTTP server uses PHP's native `stream_socket_server` /
   `stream_socket_accept` — automatically non-blocking inside TrueAsync coroutines.
 - **`await(spawn(...))`** is required to enter the TrueAsync scheduler from the CLI entry
-  point. The entire server lifecycle runs inside that outer coroutine.
+  point. The entire server lifecycle runs inside `Http\Server::listen()`.
 
 ---
 
@@ -89,7 +93,7 @@ return [
     ],
 ];
 ```
-`AsyncRunnerFactory` reads `mezzio-async.http-server` first, then falls back to
+`ServerFactory` reads `mezzio-async.http-server` first, then falls back to
 the flat `mezzio-async` array. Default host `0.0.0.0`, port `8080`.
 
 ### Testing

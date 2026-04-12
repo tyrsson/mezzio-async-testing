@@ -9,7 +9,9 @@ applyTo: "src/mezzio-async/src/Http/**/*.php"
 
 | Class | Role |
 |-------|------|
-| `Runner\AsyncRunner` | Central server — owns Scope, accept loop, signal handling |
+| `Http\Server` | TCP socket, scheduler entry, Scope, accept loop, signal handling |
+| `Http\ServerFactory` | Reads host/port config, injects logger, returns `Server` |
+| `Runner\AsyncRunner` | Mezzio integration — parse, dispatch, emit, log per connection |
 | `Http\RequestParser` | fread chunk accumulator → `?ServerRequestInterface` |
 | `Http\ResponseEmitter` | Serialises PSR-7 response to raw bytes via `fwrite` |
 | `Http\ServerRequestFactory` | Invokable — builds `Laminas\Diactoros\ServerRequest` |
@@ -36,7 +38,7 @@ if ($server === false) {
 }
 ```
 
-The server socket is closed in the `finally` block of the accept coroutine, not in `run()`.
+The server socket is closed in the `finally` block of the accept coroutine, not in `listen()`.
 
 ---
 

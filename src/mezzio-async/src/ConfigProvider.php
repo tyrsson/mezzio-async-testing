@@ -7,6 +7,8 @@ namespace Mezzio\Async;
 use Laminas\HttpHandlerRunner\RequestHandlerRunnerInterface;
 use Mezzio\Async\Http\RequestParser;
 use Mezzio\Async\Http\ResponseEmitter;
+use Mezzio\Async\Http\Server;
+use Mezzio\Async\Http\ServerFactory;
 use Mezzio\Async\Http\ServerRequestFactory;
 use Mezzio\Async\Http\StaticFileHandler;
 use Mezzio\Async\Log\LoggerDelegator;
@@ -41,6 +43,7 @@ final class ConfigProvider
                 AsyncRunner::class          => AsyncRunnerFactory::class,
                 RequestParser::class        => \Mezzio\Async\Http\RequestParserFactory::class,
                 ResponseEmitter::class      => \Mezzio\Async\Http\ResponseEmitterFactory::class,
+                Server::class               => ServerFactory::class,
                 ServerRequestFactory::class => \Mezzio\Async\Http\ServerRequestFactoryFactory::class,
                 StaticFileHandler::class    => \Mezzio\Async\Http\StaticFileHandlerFactory::class,
             ],

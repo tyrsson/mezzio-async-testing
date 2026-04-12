@@ -64,6 +64,8 @@ config/                   # Mezzio configuration
 src/mezzio-async/src/     # async server package
   ConfigProvider.php
   Http/
+    Server.php                 # TCP socket, scheduler entry, Scope, accept loop, signals
+    ServerFactory.php
     RequestParser.php          # raw bytes → PSR-7 ServerRequest
     ResponseEmitter.php        # PSR-7 Response → socket
     ServerRequestFactory.php   # assembles Laminas\Diactoros\ServerRequest
@@ -71,7 +73,7 @@ src/mezzio-async/src/     # async server package
   Log/
     LoggerDelegator.php        # adds file + stderr handlers to Monolog
   Runner/
-    AsyncRunner.php            # core server: scope, accept loop, signal handling
+    AsyncRunner.php            # Mezzio integration: parse, dispatch, emit, log
     AsyncRunnerFactory.php
 src/App/                  # application handlers, templates, routes
 ```
@@ -81,6 +83,8 @@ src/App/                  # application handlers, templates, routes
 ## Architecture Notes
 
 - **One process, one thread, many coroutines.** `Async\Scope` owns all connection coroutines.
+- **`Http\Server`** owns the socket, TrueAsync scheduler entry, `Scope` lifecycle, accept loop, and signal handling.
+- **`Runner\AsyncRunner`** is a thin Mezzio integration layer — it delegates server lifecycle to `Http\Server` and handles only individual connections (parse, dispatch, emit, log).
 - **Services are long-lived.** All DI services are shared across every request — they must be stateless.
 - **No `async`/`await` keywords.** TrueAsync uses standard PHP; I/O yields automatically inside coroutines.
 - Routes are registered automatically via `RouteCollectorDelegator` — no `routes.php` callback needed.
