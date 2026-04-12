@@ -1,0 +1,34 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+use Mezzio\Application;
+use Mezzio\MiddlewareFactory;
+
+if (! extension_loaded('true_async')) {
+    fwrite(STDERR, "Error: the 'true_async' extension is required but not loaded.\n");
+    exit(1);
+}
+
+if (PHP_SAPI !== 'cli') {
+    fwrite(STDERR, "Error: this script must be run from the CLI.\n");
+    exit(1);
+}
+
+chdir(dirname(__DIR__));
+require 'vendor/autoload.php';
+
+/** @var \Psr\Container\ContainerInterface $container */
+$container = require 'config/container.php';
+
+// Wire up the Mezzio middleware pipeline.
+// Routes are registered automatically via RouteCollectorDelegator when the
+// container resolves RouteCollectorInterface — no routes.php needed here.
+$app     = $container->get(Application::class);
+$factory = $container->get(MiddlewareFactory::class);
+
+(require 'config/pipeline.php')($app, $factory, $container);
+
+// Run — delegates to AsyncRunner::run() via the RequestHandlerRunnerInterface alias
+$app->run();

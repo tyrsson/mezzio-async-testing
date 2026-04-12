@@ -16,6 +16,7 @@
     ],
     "require": {
         "php": "~8.2.0 || ~8.3.0 || ~8.4.0 || ~8.5.0 || ~8.6.0",
+        "axleus/axleus-log": "0.0.x-dev",
         "laminas/laminas-component-installer": "^3.7",
         "laminas/laminas-config-aggregator": "^1.19",
         "laminas/laminas-diactoros": "^3.8",
@@ -33,8 +34,7 @@
         "phpstan/phpstan-phpunit": "^2.0",
         "phpunit/phpunit": "^11.5.42",
         "roave/security-advisories": "dev-master",
-        "webware/coding-standard": "^0.1.0",
-        "webware/traccio": "^0.1.0"
+        "webware/coding-standard": "^0.1.0"
     },
     "autoload": {
         "psr-4": {

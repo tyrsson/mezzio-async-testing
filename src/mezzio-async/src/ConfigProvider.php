@@ -4,27 +4,57 @@ declare(strict_types=1);
 
 namespace Mezzio\Async;
 
-final readonly class ConfigProvider
+use Laminas\HttpHandlerRunner\RequestHandlerRunnerInterface;
+use Mezzio\Async\Http\RequestParser;
+use Mezzio\Async\Http\ResponseEmitter;
+use Mezzio\Async\Http\ServerRequestFactory;
+use Mezzio\Async\Http\StaticFileHandler;
+use Mezzio\Async\Log\LoggerDelegator;
+use Mezzio\Async\Runner\AsyncRunner;
+use Mezzio\Async\Runner\AsyncRunnerFactory;
+use Psr\Log\LoggerInterface;
+
+use const PHP_SAPI;
+
+final class ConfigProvider
 {
-    /**
-     * Returns the configuration array.
-     *
-     * To add a bit of a structure, each section is defined in a separate
-     * method which returns an array with its configuration.
-     */
     public function __invoke(): array
     {
-        return [
-            'dependencies' => $this->getDependencies(),
-        ];
+        $config = PHP_SAPI === 'cli'
+            ? ['dependencies' => $this->getDependencies()]
+            : [];
+
+        $config['mezzio-async'] = $this->getDefaultConfig();
+
+        return $config;
     }
 
-    /**
-     * Returns the container dependencies.
-     */
     public function getDependencies(): array
     {
         return [
+            'delegators' => [
+                LoggerInterface::class => [
+                    LoggerDelegator::class,
+                ],
+            ],
+            'factories' => [
+                AsyncRunner::class          => AsyncRunnerFactory::class,
+                RequestParser::class        => \Mezzio\Async\Http\RequestParserFactory::class,
+                ResponseEmitter::class      => \Mezzio\Async\Http\ResponseEmitterFactory::class,
+                ServerRequestFactory::class => \Mezzio\Async\Http\ServerRequestFactoryFactory::class,
+                StaticFileHandler::class    => \Mezzio\Async\Http\StaticFileHandlerFactory::class,
+            ],
+            'aliases' => [
+                RequestHandlerRunnerInterface::class => AsyncRunner::class,
+            ],
+        ];
+    }
+
+    public function getDefaultConfig(): array
+    {
+        return [
+            'host' => '0.0.0.0',
+            'port' => 8080,
         ];
     }
 }
