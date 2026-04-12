@@ -24,9 +24,11 @@ Test directory : test/MezzioTest/Async/
 src/mezzio-async/src/
   ConfigProvider.php                 ← single DI entry point
   Runner/
-    AsyncRunner.php                  ← implements RequestHandlerRunnerInterface
+    AsyncRunner.php                  ← implements RequestHandlerRunnerInterface; connection handling
     AsyncRunnerFactory.php
   Http/
+    Server.php                       ← TCP socket, scheduler entry, Scope, accept loop, signals
+    ServerFactory.php
     RequestParser.php                ← fread accumulator → ?ServerRequestInterface
     RequestParserFactory.php
     ResponseEmitter.php              ← fwrite HTTP/1.1 serialiser
@@ -80,6 +82,7 @@ Current `getDependencies()` registration:
     AsyncRunner::class          => AsyncRunnerFactory::class,
     RequestParser::class        => RequestParserFactory::class,
     ResponseEmitter::class      => ResponseEmitterFactory::class,
+    Server::class               => ServerFactory::class,
     ServerRequestFactory::class => ServerRequestFactoryFactory::class,
     StaticFileHandler::class    => StaticFileHandlerFactory::class,
 ],
@@ -113,6 +116,32 @@ final readonly class MyServiceFactory
 
 ---
 
+## Http\Server
+
+`Mezzio\Async\Http\Server` is `final readonly`. It owns the entire server lifecycle.
+
+Constructor:
+```php
+public function __construct(
+    private string          $host,
+    private int             $port,
+    private LoggerInterface $logger,
+)
+```
+
+`ServerFactory` reads config from `$config['mezzio-async']['http-server']`, falling
+back to the flat `$config['mezzio-async']` array. Default host `0.0.0.0`, port `8080`.
+
+The `listen(callable $connectionHandler): void` method:
+1. Creates `stream_socket_server` with `tcp_nodelay` option
+2. Wraps everything in `await(spawn(...))` to enter the TrueAsync scheduler
+3. Creates a `Scope` with an exception handler that logs unhandled connection errors
+4. Spawns the accept loop coroutine into the scope; passes each connection to `$connectionHandler`
+5. Calls `await_any_or_fail([signal(Signal::SIGTERM), signal(Signal::SIGINT)])`
+6. Calls `$scope->cancel()` then `$scope->awaitAfterCancellation(...)`
+
+---
+
 ## AsyncRunner
 
 `Mezzio\Async\Runner\AsyncRunner` implements `RequestHandlerRunnerInterface` and is `final readonly`.
@@ -125,21 +154,22 @@ public function __construct(
     private ResponseEmitter         $emitter,
     private StaticFileHandler       $staticFiles,
     private LoggerInterface         $logger,
-    private string                  $host,
-    private int                     $port,
+    private Server                  $server,
 )
 ```
 
-`AsyncRunnerFactory` reads config from `$config['mezzio-async']['http-server']`, falling
-back to the flat `$config['mezzio-async']` array. Default host `0.0.0.0`, port `8080`.
+`AsyncRunnerFactory` pulls all dependencies directly from the container — no config reading.
+Config is read exclusively by `ServerFactory`.
 
-The `run()` method:
-1. Creates `stream_socket_server` with `tcp_nodelay` option
-2. Wraps everything in `await(spawn(...))` to enter the TrueAsync scheduler
-3. Creates a `Scope` with an exception handler that logs unhandled connection errors
-4. Spawns the accept loop coroutine into the scope
-5. Calls `await_any_or_fail([signal(Signal::SIGTERM), signal(Signal::SIGINT)])`
-6. Calls `$scope->cancel()` then `$scope->awaitAfterCancellation(...)`
+The `run()` method is a single delegation:
+```php
+public function run(): void
+{
+    $this->server->listen($this->handleConnection(...));
+}
+```
+
+All connection logic lives in `handleConnection(mixed $conn, string $peerName): void`.
 
 ---
 
