@@ -125,18 +125,31 @@ final readonly class AsyncRunner implements RequestHandlerRunnerInterface
 
     private function handleConnection(mixed $conn, string $peerName): void
     {
-        $startNs = null;
-        $method  = 'UNKNOWN';
-        $target  = '/';
+        // Parse is kept outside the logging try/finally intentionally.
+        // Browser speculative pre-connects open a TCP connection but never send data,
+        // causing parse() to return null. These should be silently dropped — no log entry.
+        // Parse errors (mid-stream disconnect) are caught here too and closed quietly.
+        try {
+            $request = $this->parser->parse($conn, $peerName);
+        } catch (Throwable $e) {
+            $this->logger->warning('Parse error from ' . $peerName, ['exception' => $e]);
+            fclose($conn);
+            return;
+        }
+
+        if ($request === null) {
+            // Speculative pre-connect — no bytes were ever sent
+            fclose($conn);
+            return;
+        }
+
+        // From here on we have a real request; always log it.
+        $method  = $request->getMethod();
+        $target  = $request->getRequestTarget();
+        $startNs = hrtime(true);
         $status  = 500;
 
         try {
-            $request  = $this->parser->parse($conn, $peerName);
-            $method   = $request->getMethod();
-            $target   = $request->getRequestTarget();
-            $startNs  = hrtime(true); // start timing after parse
-
-            // Short-circuit for static assets — bypass Mezzio pipeline
             if ($this->staticFiles->tryServe($method, $target, $conn)) {
                 $status = 200;
                 return;
@@ -146,17 +159,16 @@ final readonly class AsyncRunner implements RequestHandlerRunnerInterface
             $status   = $response->getStatusCode();
             $this->emitter->emit($response, $conn);
         } catch (Throwable $e) {
-            $this->logger->error(
-                'Request error from ' . $peerName,
-                ['exception' => $e]
-            );
+            $this->logger->error('Request error from ' . $peerName, ['exception' => $e]);
             if (is_resource($conn)) {
                 $this->emitter->emitError($conn, 500, 'Internal Server Error');
             }
         } finally {
-            $ms = $startNs !== null
-                ? round((hrtime(true) - $startNs) / 1_000_000, 2)
-                : 0.0;
+            if (is_resource($conn)) {
+                fclose($conn);
+            }
+
+            $ms = round((hrtime(true) - $startNs) / 1_000_000, 2);
             $this->logger->info(sprintf(
                 '%s %s %d %sms %s',
                 $method,
@@ -165,10 +177,6 @@ final readonly class AsyncRunner implements RequestHandlerRunnerInterface
                 $ms,
                 $peerName,
             ));
-
-            if (is_resource($conn)) {
-                fclose($conn);
-            }
         }
     }
 }
