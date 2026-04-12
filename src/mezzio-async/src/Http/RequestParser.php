@@ -29,7 +29,7 @@ final readonly class RequestParser
         private ServerRequestFactory $requestFactory,
     ) {}
 
-    public function parse(mixed $socket, string $peerName): ServerRequestInterface
+    public function parse(mixed $socket, string $peerName): ?ServerRequestInterface
     {
         $raw   = '';
         $total = 0;
@@ -39,6 +39,10 @@ final readonly class RequestParser
             $chunk = fread($socket, self::READ_SIZE);
 
             if ($chunk === false || $chunk === '') {
+                if ($raw === '') {
+                    // Nothing received — speculative/keepalive connection, discard silently
+                    return null;
+                }
                 throw new RuntimeException('Connection closed before complete request was received');
             }
 
