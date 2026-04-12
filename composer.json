@@ -34,8 +34,7 @@
         "phpstan/phpstan-phpunit": "^2.0",
         "phpunit/phpunit": "^11.5.42",
         "roave/security-advisories": "dev-master",
-        "webware/coding-standard": "^0.1.0",
-        "webware/traccio": "^0.1.0"
+        "webware/coding-standard": "^0.1.0"
     },
     "autoload": {
         "psr-4": {
