@@ -44,7 +44,8 @@
     },
     "autoload-dev": {
         "psr-4": {
-            "AppTest\\": "test/AppTest/"
+            "AppTest\\": "test/AppTest/",
+            "MezzioTest\\Async\\": "test/MezzioTest/Async/"
         }
     },
     "minimum-stability": "dev",
