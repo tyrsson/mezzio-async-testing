@@ -1,202 +1,216 @@
 ---
-description: "Use when implementing or reviewing the HTTP server layer: AsyncRequestHandlerRunner, AsyncHttpParser, AsyncStream, AsyncResponseEmitter, socket accept loop, HTTP/1.1 request parsing, response serialisation, connection handling, or socket resource management."
-applyTo: "src/Http/**/*.php"
+description: "Use when implementing or reviewing the HTTP server layer: AsyncRunner, RequestParser, ResponseEmitter, StaticFileHandler, ServerRequestFactory, socket accept loop, HTTP/1.1 request parsing, response serialisation, connection handling, or socket resource management."
+applyTo: "src/mezzio-async/src/Http/**/*.php"
 ---
 
 # HTTP Server Implementation Guide
 
+## Actual Class Inventory
+
+| Class | Role |
+|-------|------|
+| `Runner\AsyncRunner` | Central server — owns Scope, accept loop, signal handling |
+| `Http\RequestParser` | fread chunk accumulator → `?ServerRequestInterface` |
+| `Http\ResponseEmitter` | Serialises PSR-7 response to raw bytes via `fwrite` |
+| `Http\ServerRequestFactory` | Invokable — builds `Laminas\Diactoros\ServerRequest` |
+| `Http\StaticFileHandler` | Serves `public/` with path-traversal guard |
+
+---
+
 ## Server Socket Setup
 
-The server socket is created with `stream_socket_server()`. TrueAsync makes `stream_socket_accept()`
-non-blocking automatically inside a coroutine — no `stream_set_blocking()` calls needed.
-
 ```php
-$context = stream_context_create(['socket' => ['backlog' => $backlog]]);
-$socket  = stream_socket_server(
-    "tcp://{$host}:{$port}",
+$context = stream_context_create(['socket' => ['tcp_nodelay' => true]]);
+$server  = stream_socket_server(
+    sprintf('tcp://%s:%d', $host, $port),
     $errno,
     $errstr,
     STREAM_SERVER_BIND | STREAM_SERVER_LISTEN,
     $context,
 );
 
-if ($socket === false) {
-    throw new RuntimeException("Cannot bind {$host}:{$port}: {$errstr} ({$errno})");
+if ($server === false) {
+    throw new \RuntimeException(
+        sprintf('Cannot bind %s:%d — %s (%d)', $host, $port, $errstr, $errno)
+    );
 }
 ```
 
-**Close the socket in `finally`:**
-
-```php
-try {
-    // accept loop
-} finally {
-    fclose($socket);
-}
-```
+The server socket is closed in the `finally` block of the accept coroutine, not in `run()`.
 
 ---
 
 ## Accept Loop
 
-The accept loop runs in a coroutine owned by the server scope. Each accepted connection spawns
-its own child coroutine. The loop runs until the scope is cancelled.
-
 ```php
-$scope->spawn(function() use ($socket, $scope) {
-    while (true) {
-        $conn = @stream_socket_accept($socket, timeout: -1, $peerName);
-        if ($conn === false) {
-            // accept was interrupted (e.g. scope cancelled) — exit cleanly
-            break;
-        }
-        // Each connection is isolated in its own coroutine
-        $scope->spawn(function() use ($conn, $peerName) {
-            try {
-                $this->handleConnection($conn, $peerName);
-            } finally {
-                fclose($conn);
+$scope->spawn(function () use ($server, $scope): void {
+    try {
+        while (true) {
+            $peerName = '';
+            $conn     = @stream_socket_accept($server, -1, $peerName);
+
+            if ($conn === false) {
+                break; // scope cancelled — exit cleanly
             }
-        });
+
+            $scope->spawn($this->handleConnection(...), $conn, $peerName);
+        }
+    } finally {
+        fclose($server);
     }
 });
 ```
 
-**Key points:**
-- `stream_socket_accept(..., timeout: -1)` blocks only the accept coroutine, not the process
-- `@` suppresses the warning emitted when accept is interrupted by cancellation
-- Each connection coroutine owns its socket and MUST `fclose()` it in `finally`
-- The connection scope is separate from the server scope; cancel only the connection coroutine
-  on per-connection errors, not the entire server scope
+**Critical rules:**
+- `stream_socket_accept` takes **positional arguments only** — never named args
+- `@` suppresses the warning emitted when accept is interrupted by scope cancellation
+- The server socket is closed in `finally` of the accept coroutine
+- Connection coroutines are spawned into the same `$scope` so the scope's exception
+  handler shields the accept loop from individual connection errors
 
 ---
 
-## HTTP/1.1 Request Parsing (`AsyncHttpParser`)
+## Connection Handling — Parse Outside Logging try/finally
 
-The parser reads raw bytes from the socket and produces a `ServerRequestInterface`. All
-`fread()` and `fgets()` calls inside a coroutine automatically yield to the scheduler.
+Modern browsers open speculative TCP connections without sending data. `RequestParser::parse()`
+returns `null` for these. Parse must happen **outside** the logging `try/finally` so that
+null (empty) connections are dropped silently with no log entry. If parse is inside `try`,
+the `finally` logging block always runs and produces `UNKNOWN / 500 / 0ms` noise.
 
-### Parsing Strategy
-
-1. **Read request line** — `METHOD SP Request-URI SP HTTP/Version CRLF`
-2. **Read headers** — read lines until empty line (`\r\n`)
-3. **Determine body length** from `Content-Length` header or `Transfer-Encoding: chunked`
-4. **Read body** — either fixed-length or de-chunked
-
-### Implementation Sketch
-
+**Correct structure:**
 ```php
-public function parse(mixed $socket): RawRequest
+private function handleConnection(mixed $conn, string $peerName): void
 {
-    // Set a configurable read timeout
-    stream_set_timeout($socket, $this->readTimeoutSeconds);
-
-    // 1. Read request line
-    $requestLine = fgets($socket, 8192);
-    if ($requestLine === false) {
-        throw new InputOutputException('Failed to read request line');
-    }
-    [$method, $target, $protocol] = explode(' ', rtrim($requestLine), 3);
-
-    // 2. Read headers
-    $headers = [];
-    while (($line = fgets($socket, 8192)) !== false) {
-        $line = rtrim($line, "\r\n");
-        if ($line === '') break;
-        [$name, $value] = explode(':', $line, 2);
-        $headers[strtolower(trim($name))][] = trim($value);
+    // PARSE — outside the logging try/finally
+    try {
+        $request = $this->parser->parse($conn, $peerName);
+    } catch (Throwable $e) {
+        $this->logger->warning('Parse error from ' . $peerName, ['exception' => $e]);
+        fclose($conn);
+        return;
     }
 
-    // 3. Read body
-    $body = $this->readBody($socket, $headers);
+    if ($request === null) {
+        // Speculative pre-connect — no bytes ever sent; drop silently
+        fclose($conn);
+        return;
+    }
 
-    return new RawRequest($method, $target, $protocol, $headers, $body);
-}
-```
+    // Real request — always log
+    $method  = $request->getMethod();
+    $target  = $request->getRequestTarget();
+    $startNs = hrtime(true);
+    $status  = 500;
 
-### Timeout Handling
-
-`stream_set_timeout()` is honoured by TrueAsync inside coroutines. After calling it, check
-`stream_get_meta_data($socket)['timed_out']` after each read call, or rely on the `-1`
-return value and throw `Async\TimeoutException`.
-
-### Limits to Enforce (Configurable)
-
-| Limit | Config Key | Default |
-|-------|-----------|---------|
-| Max request line length | `max-request-line` | 8 KiB |
-| Max header line length | `max-header-line` | 8 KiB |
-| Max header count | `max-headers` | 100 |
-| Max body size | `max-body-size` | 8 MiB |
-| Read timeout | `read-timeout` | 30 s |
-
----
-
-## `AsyncStream` (PSR-7 Body)
-
-The parser fully buffers the request body before building the PSR-7 request. Wrap it in a
-simple string-backed stream:
-
-```php
-final class AsyncStream implements StreamInterface
-{
-    private int $position = 0;
-
-    public function __construct(private string $content) {}
-
-    public function getContents(): string { return substr($this->content, $this->position); }
-    public function read(int $length): string { /* substr + advance position */ }
-    public function rewind(): void { $this->position = 0; }
-    public function isReadable(): bool { return true; }
-    public function isWritable(): bool { return false; }
-    public function isSeekable(): bool { return true; }
-    // ... remaining PSR-7 StreamInterface methods
-}
-```
-
-Do **not** stream the socket body through the PSR-7 stream lazily — it complicates
-coroutine lifetime management. Read it fully upfront.
-
----
-
-## `AsyncResponseEmitter`
-
-Serialises a PSR-7 `ResponseInterface` to raw HTTP/1.1 bytes.
-
-```php
-public function emit(ResponseInterface $response, mixed $socket): void
-{
-    // Status line
-    fwrite($socket, sprintf(
-        "HTTP/%s %d %s\r\n",
-        $response->getProtocolVersion(),
-        $response->getStatusCode(),
-        $response->getReasonPhrase(),
-    ));
-
-    // Headers
-    foreach ($response->getHeaders() as $name => $values) {
-        foreach ($values as $value) {
-            fwrite($socket, "{$name}: {$value}\r\n");
+    try {
+        if ($this->staticFiles->tryServe($method, $target, $conn)) {
+            $status = 200;
+            return;
         }
-    }
-    fwrite($socket, "\r\n");
 
-    // Body in chunks
-    $body = $response->getBody();
-    if ($body->isSeekable()) {
-        $body->rewind();
-    }
-    while (!$body->eof()) {
-        fwrite($socket, $body->read(self::CHUNK_SIZE));
+        $response = $this->handler->handle($request);
+        $status   = $response->getStatusCode();
+        $this->emitter->emit($response, $conn);
+    } catch (Throwable $e) {
+        $this->logger->error('Request error from ' . $peerName, ['exception' => $e]);
+        if (is_resource($conn)) {
+            $this->emitter->emitError($conn, 500, 'Internal Server Error');
+        }
+    } finally {
+        if (is_resource($conn)) {
+            fclose($conn);
+        }
+
+        $ms = round((hrtime(true) - $startNs) / 1_000_000, 2);
+        $this->logger->info(sprintf('%s %s %d %sms %s', $method, $target, $status, $ms, $peerName));
     }
 }
-
-public const CHUNK_SIZE = 2_097_152; // 2 MiB, same as mezzio-swoole
 ```
 
-**All `fwrite()` calls yield the coroutine automatically on slow clients.** No manual async
-wiring needed.
+---
+
+## RequestParser
+
+`RequestParser::parse(mixed $socket, string $peerName): ?ServerRequestInterface`
+
+**Strategy:** accumulate `fread()` chunks until `\r\n\r\n` header terminator is found, then
+hand the raw string to `ServerRequestFactory`. All `fread()` inside a TrueAsync coroutine
+automatically yields to the scheduler — no `stream_set_blocking()` needed.
+
+**Return contract:**
+- Returns `null` when the first `fread` returns `''` or `false` with no data accumulated.
+  This is a browser speculative pre-connect; the caller must close and return silently.
+- Throws `RuntimeException` when data had started arriving and the connection was then dropped.
+- Throws `RuntimeException` on malformed request line or oversized request (>8 MiB).
+
+**Constants:**
+```php
+private const int READ_SIZE = 8192;
+private const int MAX_SIZE  = 8_388_608; // 8 MiB hard ceiling
+```
+
+**Header parsing:** all header names are lowercased. Values are collected as arrays
+(`$headers[$name][]`). The factory receives `array<string, string[]>`.
+
+**Body reading:** after the header block, any bytes already buffered past `\r\n\r\n` are
+treated as the body start. Remaining bytes declared by `Content-Length` are read in a
+second loop.
+
+---
+
+## ServerRequestFactory
+
+Invokable — called directly by `RequestParser` with:
+
+```php
+($this->requestFactory)($method, $target, $protocol, $headers, $body, $peerName);
+```
+
+Produces a `Laminas\Diactoros\ServerRequest`. Handles:
+- URI construction from `Host` header + target
+- Cookie parsing (`; ` separator → `parse_str`)
+- Query param parsing via `parse_url` + `parse_str`
+- Parsed body for `application/x-www-form-urlencoded`
+- Body stream: `Laminas\Diactoros\Stream('php://temp', 'wb+')`
+
+---
+
+## ResponseEmitter
+
+```php
+// Normal response
+public function emit(ResponseInterface $response, mixed $socket): void
+
+// Error shortcut (no PSR-7 object needed)
+public function emitError(mixed $socket, int $status, string $reason): void
+```
+
+`emit()` writes: status line → headers → `\r\n` → body (65 536-byte read chunks).  
+All `fwrite()` calls yield the coroutine on slow clients automatically.
+
+`emitError()` writes a minimal response:
+```
+HTTP/1.1 {status} {reason}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n
+```
+
+---
+
+## StaticFileHandler
+
+`tryServe(string $method, string $path, mixed $conn): bool`
+
+- Returns `true` and writes the full response if a matching file exists in `public/`.
+- Returns `false` if the request should continue to the Mezzio pipeline.
+- Only handles `GET` and `HEAD` requests.
+- Strips query string before resolving path.
+- Path traversal prevention: `realpath()` result must start with `$publicRoot`.
+- MIME types mapped for: css, js, json, html, svg, png, jpg, jpeg, gif, webp, ico,
+  woff, woff2, ttf, txt.
+- Response headers include `Cache-Control: public, max-age=3600`.
+
+`StaticFileHandlerFactory` hardcodes the public root as `'public'` (relative to CWD,
+which is `/var/www/app` inside Docker).
+
 
 ---
 

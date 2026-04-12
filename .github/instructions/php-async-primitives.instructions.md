@@ -1,5 +1,5 @@
 ---
-description: "Use when writing or reviewing any code that uses TrueAsync (php-async extension) primitives: spawn, await, Scope, Future, Channel, Context, Pool, TaskGroup, delay, suspend, protect, timeout. Also applies when handling coroutine cancellation, concurrency safety, or signal handling."
+description: "Use when writing or reviewing any code that uses TrueAsync (php-async extension) primitives: spawn, await, Scope, Future, Channel, Context, Pool, TaskGroup, delay, suspend, protect, timeout. Also applies when handling coroutine cancellation, concurrency safety, signal handling, or entering the TrueAsync scheduler from CLI."
 ---
 
 # TrueAsync Primitives Usage Guide
@@ -13,6 +13,36 @@ if (!extension_loaded('true_async')) {
     $this->markTestSkipped('true_async extension not available');
 }
 ```
+
+---
+
+## Entering the Scheduler from CLI
+
+The CLI entry point is synchronous PHP. `await(spawn(...))` is required to enter the
+TrueAsync scheduler and block until the coroutine finishes. The entire server lifecycle
+must be nested inside it:
+
+```php
+// bin/mezzio-async or equivalent entry point
+await(spawn(function () use ($server): void {
+    $scope = new Async\Scope();
+
+    // ... accept loop, signal handling, etc.
+
+    await_any_or_fail([
+        signal(Signal::SIGTERM),
+        signal(Signal::SIGINT),
+    ]);
+
+    $scope->cancel();
+    $scope->awaitAfterCancellation(
+        errorHandler: fn(Throwable $e) => $logger->error('Drain error', ['exception' => $e])
+    );
+}));
+```
+
+`$scope->awaitAfterCancellation()` **must** be called from inside the outer coroutine
+(i.e. inside `await(spawn(...))`). Calling it from synchronous PHP context will throw.
 
 ---
 
@@ -238,5 +268,8 @@ while (checkCondition() === false) {
 | Sharing one PDO across coroutines | Use `Async\Pool` |
 | Using `sleep()` thinking it blocks all | `sleep()` inside coroutine yields, not blocks process |
 | Catching `Async\AsyncCancellation` and not re-throwing | Re-throw or exit the coroutine cleanly |
-| Forgetting `finally` for socket/file close | Always `fclose($socket)` in `finally` |
+| Forgetting `fclose()` for socket/file close | Always `fclose($socket)` in `finally` |
 | Using `stream_set_blocking($s, false)` manually | Not needed — TrueAsync does this automatically |
+| Named args on `stream_socket_accept` | Positional only: `stream_socket_accept($s, -1, $peer)` |
+| Calling `awaitAfterCancellation()` from sync context | Must be called inside `await(spawn(...))` |
+| Logging before parse — null = speculative pre-connect | Parse outside `try/finally` that logs; close and return on null |
