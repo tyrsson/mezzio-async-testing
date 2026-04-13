@@ -44,6 +44,9 @@ final readonly class AsyncRunner implements RequestHandlerRunnerInterface
 
     private function handleConnection(mixed $conn, string $peerName): void
     {
+        // Clock starts at connection entry — measures read + parse + dispatch + emit.
+        $startNs = hrtime(true);
+
         // Parse is kept outside the logging try/finally intentionally.
         // Browser speculative pre-connects open a TCP connection but never send data,
         // causing parse() to return null. These should be silently dropped — no log entry.
@@ -63,10 +66,9 @@ final readonly class AsyncRunner implements RequestHandlerRunnerInterface
         }
 
         // From here on we have a real request; always log it.
-        $method  = $request->getMethod();
-        $target  = $request->getRequestTarget();
-        $startNs = hrtime(true);
-        $status  = 500;
+        $method = $request->getMethod();
+        $target = $request->getRequestTarget();
+        $status = 500;
 
         try {
             if ($this->staticFiles->tryServe($method, $target, $conn)) {
