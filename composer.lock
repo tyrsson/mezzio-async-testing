@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "0f98b1499a0fb2027575c41b9f809be6",
+    "content-hash": "5aab20def8894e22601afa3ae14a033c",
     "packages": [
         {
             "name": "axleus/axleus-log",
@@ -3181,6 +3181,136 @@
                 "source": "https://github.com/phar-io/version/tree/3.2.1"
             },
             "time": "2022-02-21T01:04:05+00:00"
+        },
+        {
+            "name": "php-db/phpdb",
+            "version": "0.6.x-dev",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/php-db/phpdb.git",
+                "reference": "81844a5699bf397bf044bbe36ea90be361b4a021"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/php-db/phpdb/zipball/81844a5699bf397bf044bbe36ea90be361b4a021",
+                "reference": "81844a5699bf397bf044bbe36ea90be361b4a021",
+                "shasum": ""
+            },
+            "require": {
+                "laminas/laminas-servicemanager": "^3.0.0 || ^4.0.0",
+                "laminas/laminas-stdlib": "^3.20.0",
+                "php": "~8.2.0 || ~8.3.0 || ~8.4.0 || ~8.5.0"
+            },
+            "conflict": {
+                "laminas/laminas-db": "*",
+                "zendframework/zend-db": "*"
+            },
+            "require-dev": {
+                "laminas/laminas-coding-standard": "^3.0.1",
+                "laminas/laminas-eventmanager": "^3.14.0",
+                "laminas/laminas-hydrator": "^4.6.0",
+                "phpbench/phpbench": "^1.4",
+                "phpstan/phpstan": "^2.1",
+                "phpstan/phpstan-phpunit": "^2.0",
+                "phpunit/phpunit": "^11.5.42",
+                "rector/rector": "^2.0"
+            },
+            "suggest": {
+                "laminas/laminas-eventmanager": "Laminas\\EventManager component",
+                "laminas/laminas-hydrator": "(^5.0.0) Laminas\\Hydrator component for using HydratingResultSets"
+            },
+            "default-branch": true,
+            "type": "library",
+            "extra": {
+                "laminas": {
+                    "config-provider": "PhpDb\\ConfigProvider"
+                }
+            },
+            "autoload": {
+                "psr-4": {
+                    "PhpDb\\": "src/",
+                    "CustomRule\\PHPUnit\\": "rector/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "BSD-3-Clause"
+            ],
+            "description": "Database abstraction layer, SQL abstraction, result set abstraction, and RowDataGateway and TableDataGateway implementations",
+            "homepage": "https://php-db.dev",
+            "keywords": [
+                "db",
+                "laminas",
+                "mezzio",
+                "php-db"
+            ],
+            "support": {
+                "docs": "https://docs.php-db.dev/",
+                "issues": "https://github.com/php-db/phpdb/issues",
+                "source": "https://github.com/php-db/phpdb"
+            },
+            "time": "2026-04-13T01:24:01+00:00"
+        },
+        {
+            "name": "php-db/phpdb-pgsql",
+            "version": "0.1.x-dev",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/php-db/phpdb-pgsql.git",
+                "reference": "f077beefd6609f3b701f20f2b4585d4bbc3f7525"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/php-db/phpdb-pgsql/zipball/f077beefd6609f3b701f20f2b4585d4bbc3f7525",
+                "reference": "f077beefd6609f3b701f20f2b4585d4bbc3f7525",
+                "shasum": ""
+            },
+            "require": {
+                "php": "~8.2.0 || ~8.3.0 || ~8.4.0 || ~8.5.0",
+                "php-db/phpdb": "^0.6.0"
+            },
+            "require-dev": {
+                "ext-pdo_pgsql": "*",
+                "ext-pgsql": "*",
+                "laminas/laminas-coding-standard": "^3.0.1",
+                "phpstan/phpstan": "^2.1",
+                "phpstan/phpstan-phpunit": "^2.0",
+                "phpunit/phpunit": "^11.5.42"
+            },
+            "suggest": {
+                "ext-pdo_pgsql": "*",
+                "ext-pgsql": "*",
+                "laminas/laminas-servicemanager": "Laminas\\ServiceManager component"
+            },
+            "default-branch": true,
+            "type": "library",
+            "extra": {
+                "laminas": {
+                    "config-provider": "PhpDb\\Pgsql\\ConfigProvider"
+                }
+            },
+            "autoload": {
+                "psr-4": {
+                    "PhpDb\\Pgsql\\": "src/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "BSD-3-Clause"
+            ],
+            "description": "PostgreSQL support for php-db",
+            "homepage": "https://php-db.dev",
+            "keywords": [
+                "db",
+                "pgsql",
+                "php-db"
+            ],
+            "support": {
+                "forum": "https://github.com/php-db/phpdb-pgsql/discussions",
+                "issues": "https://github.com/php-db/phpdb-pgsql/issues",
+                "source": "https://github.com/php-db/phpdb-pgsql"
+            },
+            "time": "2026-04-13T04:54:27+00:00"
         },
         {
             "name": "phpstan/phpstan",
@@ -7882,6 +8012,7 @@
     "minimum-stability": "dev",
     "stability-flags": {
         "axleus/axleus-log": 20,
+        "php-db/phpdb-pgsql": 20,
         "roave/security-advisories": 20
     },
     "prefer-stable": true,

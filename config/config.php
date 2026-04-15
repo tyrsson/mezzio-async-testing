@@ -14,6 +14,8 @@ $cacheConfig = [
 ];
 
 $aggregator = new ConfigAggregator([
+    \PhpDb\ConfigProvider::class,
+    \PhpDb\Pgsql\ConfigProvider::class,
     \Axleus\Log\ConfigProvider::class,
     \Laminas\Hydrator\ConfigProvider::class,
     \Phly\EventDispatcher\ConfigProvider::class,
