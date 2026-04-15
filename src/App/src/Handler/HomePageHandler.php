@@ -14,6 +14,7 @@ declare(strict_types=1);
 
 namespace App\Handler;
 
+use App\Debug;
 use Laminas\Diactoros\Response;
 use Mezzio\Template\TemplateRendererInterface;
 use Psr\Http\Message\ResponseInterface;
@@ -34,6 +35,8 @@ final class HomePageHandler implements RequestHandlerInterface
         if (null === $this->template) {
             return new Response\JsonResponse($data);
         }
+
+        Debug::dump($data, 'HomePageHandler data');
 
         return new Response\HtmlResponse($this->template->render('app::home-page', $data));
     }

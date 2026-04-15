@@ -1,6 +1,3 @@
-###############################################################################
-#                          Generated on phpdocker.io                          #
-###############################################################################
 services:
     php:
         build: docker/php
@@ -12,3 +9,22 @@ services:
         ports:
             - 80:80
         restart: unless-stopped
+        depends_on:
+            - postgres
+        
+    postgres:
+        build: docker/database/postgres
+        ports:
+            - 5432:5432
+        volumes:
+            - ./test/integration/TestFixtures/pgsql.sql:/docker-entrypoint-initdb.d/pgsql.sql
+        environment:
+            - POSTGRES_DB=${POSTGRES_DB:-phpdb_test}
+            - POSTGRES_USER=${POSTGRES_USER:-postgres}
+            - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+        healthcheck:
+            test: ["CMD-SHELL", "sh -c 'pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-phpdb_test}'"]
+            interval: 30s
+            timeout: 60s
+            retries: 5
+            start_period: 80s
