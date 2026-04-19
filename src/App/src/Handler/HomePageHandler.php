@@ -36,8 +36,6 @@ final class HomePageHandler implements RequestHandlerInterface
             return new Response\JsonResponse($data);
         }
 
-        Debug::dump($data, 'HomePageHandler data');
-
         return new Response\HtmlResponse($this->template->render('app::home-page', $data));
     }
 }

@@ -89,3 +89,39 @@ src/App/                  # application handlers, templates, routes
 - **No `async`/`await` keywords.** TrueAsync uses standard PHP; I/O yields automatically inside coroutines.
 - Routes are registered automatically via `RouteCollectorDelegator` — no `routes.php` callback needed.
 
+---
+
+## Debugging (WSL / Dev Container)
+
+TrueAsync ships its own custom Xdebug extension (`xdebug.so`). On Linux the extension filename
+differs from the Windows build (`php_xdebug.dll`). The `.devcontainer/docker/php/Dockerfile`
+creates a symlink to bridge the gap:
+
+```dockerfile
+RUN ln -s /usr/local/lib/php/extensions/no-debug-zts-20250926/xdebug.so \
+          /usr/local/lib/php/extensions/no-debug-zts-20250926/php_xdebug.so
+```
+
+This allows `zend_extension = php_xdebug` in `docker/php/conf.d/xdebug.ini` to work on both
+platforms without change.
+
+### Xdebug mode
+
+`xdebug.start_with_request = yes` is required — TrueAsync's custom Xdebug fires a debug session
+per coroutine (per HTTP request), but only in `yes` mode.
+
+### Startup workflow
+
+Because `start_with_request = yes` triggers a debug session on every PHP invocation, the server
+startup itself will pause waiting for the debug client. Always follow this order:
+
+1. **Start "Listen for Xdebug"** in VS Code (Run & Debug panel, or F5)
+2. **Start the server** in a terminal:
+   ```bash
+   php bin/mezzio-async start
+   ```
+3. The server is now running; all HTTP requests will hit breakpoints normally
+
+> If the debug listener is not active before starting the server, the server will hang
+> indefinitely waiting for a connection on port 9003.
+

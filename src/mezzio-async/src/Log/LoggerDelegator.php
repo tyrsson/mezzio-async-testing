@@ -33,7 +33,7 @@ final class LoggerDelegator
         $logDir      = $asyncConfig['log_dir'] ?? 'data/psr/log';
 
         if (! is_dir($logDir)) {
-            mkdir($logDir, 0755, recursive: true);
+            mkdir($logDir, 0777, recursive: true);
         }
 
         // Write to a rolling daily file — useLocking: false prevents buffering
@@ -41,7 +41,7 @@ final class LoggerDelegator
             stream: $logDir . '/async.log',
             level: Level::Debug,
             bubble: true,
-            filePermission: null,
+            filePermission: 0666,
             useLocking: false,
         ));
 

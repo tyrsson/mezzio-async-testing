@@ -71,6 +71,10 @@
         "sa": "vendor/bin/phpstan analyse --memory-limit=256M",
         "sa-gen-baseline": "vendor/bin/phpstan analyse --memory-limit=256M --generate-baseline",
         "sa-verbose": "vendor/bin/phpstan analyse --memory-limit=256M -vv",
+        "start": [
+            "Composer\\Config::disableProcessTimeout",
+            "php bin/mezzio-async start"
+        ],
         "serve": [
             "Composer\\Config::disableProcessTimeout",
             "php -S 0.0.0.0:8080 -t public/"

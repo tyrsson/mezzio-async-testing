@@ -15,6 +15,6 @@ final class PingHandler implements RequestHandlerInterface
 {
     public function handle(ServerRequestInterface $request): ResponseInterface
     {
-        return new JsonResponse(['ack' => time()]);
+        return new JsonResponse(['ack' => time(), 'message' => 'test']);
     }
 }

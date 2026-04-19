@@ -1,7 +1,7 @@
 // For format details, see https://aka.ms/devcontainer.json. For config options, see the
 // README at: https://github.com/devcontainers/templates/tree/main/src/docker-existing-docker-compose
 {
-	"name": "Existing Docker Compose (Extend)",
+	"name": "Mezzio-Async Dev Container",
 
 	// Update the 'dockerComposeFile' list if you have more compose files or use different names.
 	// The .devcontainer/docker-compose.yml file contains any overrides you need/want to make.
@@ -16,13 +16,17 @@
 
 	// The optional 'workspaceFolder' property is the path VS Code should open by default when
 	// connected. This is typically a file mount in .devcontainer/docker-compose.yml
-	"workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}"
+	"workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+	"features": {
+		"ghcr.io/devcontainers-extra/features/composer:1": {},
+		"ghcr.io/devcontainers/features/git:1": {}
+	},
 
 	// Features to add to the dev container. More info: https://containers.dev/features.
 	// "features": {},
 
 	// Use 'forwardPorts' to make a list of ports inside the container available locally.
-	// "forwardPorts": [],
+	"forwardPorts": [8080],
 
 	// Uncomment the next line if you want start specific services in your Docker Compose config.
 	// "runServices": [],
@@ -34,8 +38,24 @@
 	// "postCreateCommand": "cat /etc/os-release",
 
 	// Configure tool-specific properties.
-	// "customizations": {},
-
-	// Uncomment to connect as an existing user other than the container default. More info: https://aka.ms/dev-containers-non-root.
-	// "remoteUser": "devcontainer"
+	"customizations": {
+		// Configure properties specific to VS Code extensions in the container.
+		"vscode": {
+			// List of extensions to install in the container.
+			"extensions": [
+				"xdebug.php-debug",
+				"bmewburn.vscode-intelephense-client"
+			],
+			"launch.configurations": [
+				{
+					"name": "Listen for Xdebug",
+					"type": "php",
+					"request": "launch",
+					"port": 9003
+				}
+			]
+		}
+	},
+	"postCreateCommand": "composer install --ignore-platform-req=php --no-interaction",
+	"postStartCommand": "git config --global --add safe.directory /workspaces/mezzio-async-testing"
 }
