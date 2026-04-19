@@ -94,7 +94,7 @@ class Debug
      * @param  bool   $outputBuffered  OPTIONAL Echo output if true.
      * @return string
      */
-    public static function dump($var, $label = '', $showFullPath = false, bool $outputBuffered = true)
+    public static function dump($var, $label = '', $showFullPath = false, bool $outputBuffered = false)
     {
         if (strlen($label) >= 1) {
             $label = $label . PHP_EOL;
