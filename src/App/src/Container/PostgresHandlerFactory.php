@@ -17,9 +17,13 @@ final readonly class PostgresHandlerFactory
         $adapter = $container->get(AdapterInterface::class);
         assert($adapter instanceof Adapter);
 
+        $config         = $container->get('config');
+        $benchmarkModes = $config['postgres-benchmark'] ?? [];
+
         return new PostgresHandler(
             $container->get(TemplateRendererInterface::class),
             $adapter,
+            $benchmarkModes,
         );
     }
 }

@@ -66,6 +66,22 @@ class ConfigProvider
                     'healthcheck_interval_ms' => 30_000,
                 ],
             ],
+            // Keys match k6 script filenames — switch modes via ?mode=<key>.
+            // No config-cache clear or server restart needed to switch modes.
+            'postgres-benchmark'    => [
+                // 4 queries run sequentially (no coroutines).
+                // totalMs ≈ sum(elapsed_ms) — the sequential control case.
+                'baseline'   => ['concurrent' => false, 'response' => 'html'],
+                // 4 queries spawned as coroutines via await_all_or_fail.
+                // totalMs ≈ max(elapsed_ms) when queries overlap correctly.
+                'concurrent' => ['concurrent' => true,  'response' => 'html'],
+                // concurrent + JSON response only (no template rendering overhead).
+                'stress'     => ['concurrent' => true,  'response' => 'json'],
+                // concurrent + JSON, higher VU count in k6 ramp script.
+                'ramp'       => ['concurrent' => true,  'response' => 'json'],
+                // same as concurrent for long-duration soak runs.
+                'soak'       => ['concurrent' => true,  'response' => 'html'],
+            ],
         ];
     }
 
