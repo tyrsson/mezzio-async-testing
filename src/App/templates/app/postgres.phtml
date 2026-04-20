@@ -25,7 +25,7 @@ $this->layout('layout::default', ['title' => 'PostgreSQL Benchmark']);
 
     <hgroup>
         <h1>PostgreSQL Concurrent Query Benchmark</h1>
-        <p>Four independent SELECT queries executed as concurrent TrueAsync coroutines via <code>await_all_or_fail()</code>.</p>
+        <p>Four independent SELECT queries executed as concurrent TrueAsync coroutines via <code>Async\TaskGroup::all()</code>.</p>
     </hgroup>
 
     <!-- ── Timing summary ─────────────────────────────────────────────── -->
