@@ -33,6 +33,14 @@ final class RouteProvider implements RouteProviderInterface
         );
 
         $routeCollector->get(
+            '/postgres',
+            $middlewareFactory->prepare(
+                Handler\PostgresHandler::class
+            ),
+            'postgres'
+        );
+
+        $routeCollector->get(
             '/ping',
             $middlewareFactory->prepare(
                 Handler\PingHandler::class
