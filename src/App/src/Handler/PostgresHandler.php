@@ -223,7 +223,7 @@ final class PostgresHandler implements RequestHandlerInterface
     // Concurrent read queries — the benchmark workload
     //
     // Four independent SELECT queries are spawned as separate TrueAsync
-    // coroutines and awaited together.  When each query yields on PDO I/O the
+    // coroutines and awaited together.  When each query yields on I/O the
     // scheduler can service other coroutines (including other HTTP requests),
     // so the four queries overlap in time rather than running sequentially.
     //
