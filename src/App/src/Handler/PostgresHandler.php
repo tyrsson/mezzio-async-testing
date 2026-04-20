@@ -315,9 +315,7 @@ final class PostgresHandler implements RequestHandlerInterface
                     'totalMs'     => $totalMs,
                 ]);
 
-                $response = new Response();
-                $response->getBody()->write($html);
-                return $response->withHeader('Content-Type', 'text/html; charset=UTF-8');
+                return new Response\HtmlResponse($html);
             }
 
             // Fallback when no template renderer is wired
