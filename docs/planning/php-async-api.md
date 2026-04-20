@@ -58,9 +58,12 @@ Waits for **all** awaitables to settle. Returns array of results indexed by argu
 Does **not** throw on individual failures — failed awaitables return their exception in the
 result array.
 
-### `await_all_or_fail(Async\Awaitable ...$awaitables): array`
+### `await_all_or_fail(array $triggers, ?Cancellation $cancellation = null, bool $preserveKeyOrder = false): array`
 
 Waits for all to complete. Throws `Async\CompositeException` if **any** fail.
+
+> **Note:** The actual runtime signature takes an **array** of awaitables as the first
+> argument, not a variadic spread. Pass futures as `await_all_or_fail([$f1, $f2, $f3])`.
 
 ### `await_any(Async\Awaitable ...$awaitables): mixed`
 

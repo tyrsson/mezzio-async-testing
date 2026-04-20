@@ -66,13 +66,15 @@ final readonly class AsyncRunner implements RequestHandlerRunnerInterface
         }
 
         // From here on we have a real request; always log it.
-        $method = $request->getMethod();
-        $target = $request->getRequestTarget();
-        $status = 500;
+        $method    = $request->getMethod();
+        $target    = $request->getRequestTarget();
+        $status    = 500;
+        $isStatic  = false;
 
         try {
             if ($this->staticFiles->tryServe($method, $target, $conn)) {
-                $status = 200;
+                $isStatic = true;
+                $status   = 200;
                 return;
             }
 
@@ -89,15 +91,17 @@ final readonly class AsyncRunner implements RequestHandlerRunnerInterface
                 fclose($conn);
             }
 
-            $ms = round((hrtime(true) - $startNs) / 1_000_000, 2);
-            $this->logger->info(sprintf(
-                '%s %s %d %sms %s',
-                $method,
-                $target,
-                $status,
-                $ms,
-                $peerName,
-            ));
+            if (! $isStatic) {
+                $ms = round((hrtime(true) - $startNs) / 1_000_000, 2);
+                $this->logger->info(sprintf(
+                    '%s %s %d %sms %s',
+                    $method,
+                    $target,
+                    $status,
+                    $ms,
+                    $peerName,
+                ));
+            }
         }
     }
 }

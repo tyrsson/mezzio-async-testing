@@ -40,7 +40,8 @@
     "autoload": {
         "psr-4": {
             "App\\": "src/App/src/",
-            "Mezzio\\Async\\": "src/mezzio-async/src/"
+            "Mezzio\\Async\\": "src/mezzio-async/src/",
+            "PhpDb\\Async\\": "src/phpdb-async/src/"
         }
     },
     "autoload-dev": {
