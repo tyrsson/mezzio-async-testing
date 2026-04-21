@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 /**
  * @var array  $profiles    [ ['label'=>string, 'sql'=>string, 'elapsed_ms'=>float|null, 'wall_start'=>float|null] ]
- * @var float  $totalMs     Wall time for the full await_all_or_fail block (ms)
+ * @var float  $totalMs     Wall time for the full TaskGroup::all() block (ms)
  * @var array  $users       Rows from bm_users
  * @var array  $products    Rows from bm_products
  * @var array  $orders      Rows from bm_orders (with username)
@@ -18,14 +18,14 @@ $truncateSql = static function (string $sql): string {
     return strlen($sql) > 120 ? substr($sql, 0, 117) . '...' : $sql;
 };
 
-$this->layout('layout::default', ['title' => 'PostgreSQL Benchmark']);
+$this->layout('layout::default', ['title' => 'PostgreSQL Benchmark — PDO pool']);
 ?>
 
 <main class="container" style="margin-top: 2rem;">
 
     <hgroup>
-        <h1>PostgreSQL Concurrent Query Benchmark</h1>
-        <p>Four independent SELECT queries executed as concurrent TrueAsync coroutines via <code>await_all_or_fail()</code>.</p>
+        <h1>PostgreSQL Concurrent Query Benchmark <small>— PDO pool</small></h1>
+        <p>Four independent SELECT queries executed as concurrent TrueAsync coroutines via <code>Async\TaskGroup::all()</code> using the PDO connection pool (<code>PDO::ATTR_POOL_ENABLED</code>).</p>
     </hgroup>
 
     <!-- ── Timing summary ─────────────────────────────────────────────── -->
@@ -52,7 +52,7 @@ $this->layout('layout::default', ['title' => 'PostgreSQL Benchmark']);
             </tbody>
             <tfoot>
                 <tr>
-                    <th colspan="2">Total wall time (await_all_or_fail)</th>
+                    <th colspan="2">Total wall time (TaskGroup::all())</th>
                     <th colspan="2" style="text-align:right;"><?= $esc(number_format($totalMs, 2) . ' ms') ?></th>
                 </tr>
             </tfoot>

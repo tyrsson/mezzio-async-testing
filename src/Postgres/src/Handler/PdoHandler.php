@@ -12,11 +12,13 @@ declare(strict_types=1);
  * file that was distributed with this source code.
  */
 
-namespace App\Handler;
+namespace Postgres\Handler;
 
+use Async\TaskGroup;
 use Laminas\Diactoros\Response;
 use Mezzio\Template\TemplateRendererInterface;
-use PhpDb\Async\Adapter;
+use PhpDb\Adapter\Adapter;
+use PhpDb\Adapter\AdapterInterface;
 use PhpDb\Async\Profiler\Profiler;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
@@ -24,12 +26,9 @@ use Psr\Http\Server\RequestHandlerInterface;
 use RuntimeException;
 use Throwable;
 
-use PhpDb\Adapter\AdapterInterface;
-
 use function array_keys;
 use function array_values;
-use function Async\await_all_or_fail;
-use function Async\spawn;
+use function compact;
 use function count;
 use function file_get_contents;
 use function hrtime;
@@ -38,13 +37,56 @@ use function round;
 
 use const JSON_THROW_ON_ERROR;
 
-final class PostgresHandler implements RequestHandlerInterface
+/**
+ * Benchmark handler using the PDO pool adapter (PDO::ATTR_POOL_ENABLED).
+ *
+ * Route: GET /postgres/pdo[?action=setup|teardown&mode=concurrent|baseline|stress]
+ */
+final class PdoHandler implements RequestHandlerInterface
 {
     private const SEED_FILE = __DIR__ . '/../../../../data/postgres/seed.json';
 
-    // -------------------------------------------------------------------------
-    // DDL — PostgreSQL-specific; BIGSERIAL provides auto-increment PK
-    // -------------------------------------------------------------------------
+    /**
+     * Benchmark execution modes.
+     *
+     * concurrent  — 4 queries as TaskGroup coroutines; HTML response
+     * baseline    — 4 queries sequentially; proves totalMs ≈ sum(query_ms)
+     * stress      — concurrent; JSON only (no template overhead)
+     */
+    private const DEFAULT_MODES = [
+        'concurrent' => ['concurrent' => true,  'response' => 'html'],
+        'baseline'   => ['concurrent' => false, 'response' => 'html'],
+        'stress'     => ['concurrent' => true,  'response' => 'json'],
+    ];
+
+    /** @var array<string, string> */
+    private const QUERIES = [
+        'Users (top 20 by id)'             =>
+            'SELECT id, username, email, created_at
+               FROM bm_users
+              ORDER BY id
+              LIMIT 20',
+        'Products (top 20 by price)'       =>
+            'SELECT id, name, price, stock
+               FROM bm_products
+              ORDER BY price DESC
+              LIMIT 20',
+        'Recent orders (top 20)'           =>
+            'SELECT o.id, o.total, o.status, o.created_at, u.username
+               FROM bm_orders o
+               JOIN bm_users u ON u.id = o.user_id
+              ORDER BY o.created_at DESC
+              LIMIT 20',
+        'Top products by revenue (top 10)' =>
+            'SELECT p.name,
+                    SUM(oi.quantity * oi.unit_price) AS revenue,
+                    SUM(oi.quantity) AS units_sold
+               FROM bm_order_items oi
+               JOIN bm_products p ON p.id = oi.product_id
+              GROUP BY p.id, p.name
+              ORDER BY revenue DESC
+              LIMIT 10',
+    ];
 
     private const DDL_USERS = <<<SQL
         CREATE TABLE IF NOT EXISTS bm_users (
@@ -88,30 +130,28 @@ final class PostgresHandler implements RequestHandlerInterface
     public function __construct(
         private readonly ?TemplateRendererInterface $template = null,
         private readonly ?Adapter $dbAdapter = null,
+        private readonly array $benchmarkModes = [],
     ) {}
 
     public function handle(ServerRequestInterface $request): ResponseInterface
     {
         if (! $this->dbAdapter instanceof Adapter) {
-            return new Response\JsonResponse(['error' => 'No database adapter configured'], 503);
+            return new Response\JsonResponse(['error' => 'No PDO adapter configured'], 503);
         }
 
-        $action = $request->getQueryParams()['action'] ?? 'query';
+        $params = $request->getQueryParams();
+        $action = $params['action'] ?? 'query';
+        $mode   = $params['mode']   ?? 'concurrent';
 
         return match ($action) {
             'setup'    => $this->setup(),
             'teardown' => $this->teardown(),
-            default    => $this->query(),
+            default    => $this->query($mode),
         };
     }
 
-    // -------------------------------------------------------------------------
-    // Setup / Teardown
-    // -------------------------------------------------------------------------
-
     private function setup(): ResponseInterface
     {
-        // Create tables in FK-dependency order
         foreach ([self::DDL_USERS, self::DDL_PRODUCTS, self::DDL_ORDERS, self::DDL_ORDER_ITEMS] as $ddl) {
             $this->dbAdapter->query($ddl, AdapterInterface::QUERY_MODE_EXECUTE);
         }
@@ -124,7 +164,6 @@ final class PostgresHandler implements RequestHandlerInterface
 
     private function teardown(): ResponseInterface
     {
-        // Drop in reverse FK-dependency order
         foreach (['bm_order_items', 'bm_orders', 'bm_products', 'bm_users'] as $table) {
             $this->dbAdapter->query(
                 "DROP TABLE IF EXISTS {$table}",
@@ -147,17 +186,11 @@ final class PostgresHandler implements RequestHandlerInterface
 
     private function seed(array $data): array
     {
-        // Reset all data and restart sequences for deterministic IDs
         $this->dbAdapter->query(
             'TRUNCATE bm_order_items, bm_orders, bm_products, bm_users RESTART IDENTITY CASCADE',
             AdapterInterface::QUERY_MODE_EXECUTE
         );
 
-        // Use QUERY_MODE_EXECUTE with platform quoting to avoid the shallow-clone
-        // ParameterContainer accumulation bug in PhpDb\Pgsql\Statement (no __clone()).
-        // TableGateway::insert() → Sql::prepareStatementForSqlObject() →
-        // Driver::createStatement() shallow-clones the prototype, sharing the PC;
-        // switching tables causes cross-table key accumulation → wrong param count.
         $p = $this->dbAdapter->getPlatform();
 
         foreach ($data['users'] as $row) {
@@ -219,84 +252,28 @@ final class PostgresHandler implements RequestHandlerInterface
         ];
     }
 
-    // -------------------------------------------------------------------------
-    // Concurrent read queries — the benchmark workload
-    //
-    // Four independent SELECT queries are spawned as separate TrueAsync
-    // coroutines and awaited together.  When each query yields on I/O the
-    // scheduler can service other coroutines (including other HTTP requests),
-    // so the four queries overlap in time rather than running sequentially.
-    //
-    // NOTE: For maximum throughput in production replace the single shared
-    //       AdapterInterface with an Async\Pool of connections so that each
-    //       coroutine holds its own dedicated socket to PostgreSQL.
-    // -------------------------------------------------------------------------
-
-    private function query(): ResponseInterface
+    private function query(string $mode): ResponseInterface
     {
+        $modes  = $this->benchmarkModes !== [] ? $this->benchmarkModes : self::DEFAULT_MODES;
+        $config = $modes[$mode] ?? $modes['concurrent'];
+
+        $profilers = [];
+        foreach (array_keys(self::QUERIES) as $label) {
+            $profilers[$label] = new Profiler();
+        }
+
         $startNs = hrtime(true);
 
-        $profilers = [
-            'Users (top 20 by id)'           => new Profiler(),
-            'Products (top 20 by price)'      => new Profiler(),
-            'Recent orders (top 20)'          => new Profiler(),
-            'Top products by revenue (top 10)' => new Profiler(),
-        ];
-
-        [$label0, $label1, $label2, $label3] = array_keys($profilers);
-        [$prof0,  $prof1,  $prof2,  $prof3]  = array_values($profilers);
-
         try {
-            $usersCoroutine    = spawn(fn() => $this->fetchRows(
-                'SELECT id, username, email, created_at
-                   FROM bm_users
-                  ORDER BY id
-                  LIMIT 20',
-                $prof0
-            ));
-
-            $productsCoroutine = spawn(fn() => $this->fetchRows(
-                'SELECT id, name, price, stock
-                   FROM bm_products
-                  ORDER BY price DESC
-                  LIMIT 20',
-                $prof1
-            ));
-
-            $ordersCoroutine   = spawn(fn() => $this->fetchRows(
-                'SELECT o.id, o.total, o.status, o.created_at, u.username
-                   FROM bm_orders o
-                   JOIN bm_users u ON u.id = o.user_id
-                  ORDER BY o.created_at DESC
-                  LIMIT 20',
-                $prof2
-            ));
-
-            $revenueCoroutine  = spawn(fn() => $this->fetchRows(
-                'SELECT p.name,
-                        SUM(oi.quantity * oi.unit_price) AS revenue,
-                        SUM(oi.quantity) AS units_sold
-                   FROM bm_order_items oi
-                   JOIN bm_products p ON p.id = oi.product_id
-                  GROUP BY p.id, p.name
-                  ORDER BY revenue DESC
-                  LIMIT 10',
-                $prof3
-            ));
-
-            [$users, $products, $orders, $topProducts] = await_all_or_fail([
-                $usersCoroutine,
-                $productsCoroutine,
-                $ordersCoroutine,
-                $revenueCoroutine,
-            ]);
+            $results = ($config['concurrent'] ?? true)
+                ? $this->runConcurrently($profilers)
+                : $this->runSequentially($profilers);
 
             $totalMs = round((hrtime(true) - $startNs) / 1_000_000, 2);
 
-            // Collect labelled profile entries for the template
             $queryProfiles = [];
             foreach ($profilers as $label => $profiler) {
-                $profile = $profiler->getLastProfile();
+                $profile         = $profiler->getLastProfile();
                 $queryProfiles[] = [
                     'label'      => $label,
                     'sql'        => $profile['sql'] ?? '',
@@ -305,34 +282,76 @@ final class PostgresHandler implements RequestHandlerInterface
                 ];
             }
 
-            if ($this->template !== null) {
-                $html = $this->template->render('app::postgres', [
-                    'users'       => $users,
-                    'products'    => $products,
-                    'orders'      => $orders,
-                    'topProducts' => $topProducts,
-                    'profiles'    => $queryProfiles,
-                    'totalMs'     => $totalMs,
-                ]);
-
-                return new Response\HtmlResponse($html);
-            }
-
-            // Fallback when no template renderer is wired
-            return new Response\JsonResponse([
-                'users'                   => $users,
-                'products'                => $products,
-                'recent_orders'           => $orders,
-                'top_products_by_revenue' => $topProducts,
-                'profiles'                => $queryProfiles,
-                'total_ms'                => $totalMs,
-            ]);
+            return $this->renderResponse($results, $queryProfiles, $totalMs, $config['response'] ?? 'html');
         } catch (Throwable $e) {
-            return new Response\JsonResponse(
-                ['error' => $e->getMessage()],
-                500
-            );
+                return new Response\JsonResponse([
+                    'error'   => $e->getMessage(),
+                    'class'   => get_class($e),
+                    'file'    => $e->getFile(),
+                    'line'    => $e->getLine(),
+                    'trace'   => $e->getTraceAsString(),
+                ], 500);
         }
+    }
+
+    /**
+     * @param array<string, Profiler> $profilers
+     * @return array{users: array, products: array, orders: array, topProducts: array}
+     */
+    private function runConcurrently(array $profilers): array
+    {
+        $group = new TaskGroup();
+
+        $group->spawnWithKey('users',       fn() => $this->fetchRows(self::QUERIES['Users (top 20 by id)'],              $profilers['Users (top 20 by id)']));
+        $group->spawnWithKey('products',    fn() => $this->fetchRows(self::QUERIES['Products (top 20 by price)'],        $profilers['Products (top 20 by price)']));
+        $group->spawnWithKey('orders',      fn() => $this->fetchRows(self::QUERIES['Recent orders (top 20)'],            $profilers['Recent orders (top 20)']));
+        $group->spawnWithKey('topProducts', fn() => $this->fetchRows(self::QUERIES['Top products by revenue (top 10)'],  $profilers['Top products by revenue (top 10)']));
+
+        /** @var array{users: array, products: array, orders: array, topProducts: array} $results */
+        $results = $group->all()->await();
+        return $results;
+    }
+
+    /**
+     * @param array<string, Profiler> $profilers
+     * @return array{users: array, products: array, orders: array, topProducts: array}
+     */
+    private function runSequentially(array $profilers): array
+    {
+        $sqls  = array_values(self::QUERIES);
+        $profs = array_values($profilers);
+
+        $users       = $this->fetchRows($sqls[0], $profs[0]);
+        $products    = $this->fetchRows($sqls[1], $profs[1]);
+        $orders      = $this->fetchRows($sqls[2], $profs[2]);
+        $topProducts = $this->fetchRows($sqls[3], $profs[3]);
+
+        return compact('users', 'products', 'orders', 'topProducts');
+    }
+
+    private function renderResponse(array $results, array $queryProfiles, float $totalMs, string $responseType): ResponseInterface
+    {
+        if ($responseType === 'html' && $this->template !== null) {
+            $html = $this->template->render('postgres::pdo', [
+                'users'       => $results['users'],
+                'products'    => $results['products'],
+                'orders'      => $results['orders'],
+                'topProducts' => $results['topProducts'],
+                'profiles'    => $queryProfiles,
+                'totalMs'     => $totalMs,
+            ]);
+
+            return new Response\HtmlResponse($html);
+        }
+
+        return new Response\JsonResponse([
+            'users'                   => $results['users'],
+            'products'                => $results['products'],
+            'recent_orders'           => $results['orders'],
+            'top_products_by_revenue' => $results['topProducts'],
+            'profiles'                => $queryProfiles,
+            'total_ms'                => $totalMs,
+        ]);
     }
 
     private function fetchRows(string $sql, Profiler $profiler): array
