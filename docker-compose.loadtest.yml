@@ -16,7 +16,6 @@
 services:
     php:
         volumes:
-            - '.:/var/www/app'
             - './docker/php/conf.d/xdebug-loadtest.ini:/etc/php.d/xdebug.ini'
             - './docker/php/conf.d/error_reporting.loadtest.ini:/etc/php.d/error_reporting.ini'
 

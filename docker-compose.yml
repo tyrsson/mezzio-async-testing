@@ -2,7 +2,7 @@ services:
     php:
         build: docker/php
         volumes:
-            - '.:/var/www/app'
+            - '.:/workspaces/mezzio-async-testing'
             - './docker/php/conf.d/xdebug.ini:/etc/php.d/xdebug.ini'
             - './docker/php/conf.d/error_reporting.ini:/etc/php.d/error_reporting.ini'
         expose:

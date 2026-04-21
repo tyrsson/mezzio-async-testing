@@ -20,7 +20,10 @@
 	"workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
 	"features": {
 		"ghcr.io/devcontainers-extra/features/composer:1": {},
-		"ghcr.io/devcontainers/features/git:1": {}
+		"ghcr.io/devcontainers/features/git:1": {},
+		"ghcr.io/dhoeric/features/k6:1": {
+			"version": "0.56.0"
+		}
 	},
 
 	// Features to add to the dev container. More info: https://containers.dev/features.
@@ -45,7 +48,8 @@
 			// List of extensions to install in the container.
 			"extensions": [
 				"xdebug.php-debug",
-				"bmewburn.vscode-intelephense-client"
+				"bmewburn.vscode-intelephense-client",
+				"jaguadoromero.vscode-php-create-class"
 			],
 			"launch.configurations": [
 				{
@@ -57,6 +61,7 @@
 			]
 		}
 	},
-	"postCreateCommand": "composer install --ignore-platform-req=php --no-interaction && curl -L https://github.com/grafana/k6/releases/download/v0.56.0/k6-v0.56.0-linux-amd64.tar.gz | tar xz && mv k6-v0.56.0-linux-amd64/k6 /usr/local/bin/k6",
+	//"remoteUser": "root",
+	"postCreateCommand": "composer install --ignore-platform-req=php --no-interaction",
 	"postStartCommand": "git config --global --add safe.directory /workspaces/mezzio-async-testing"
 }
