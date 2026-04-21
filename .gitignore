@@ -8,4 +8,6 @@
 /coveralls-upload.json
 /phpunit.xml
 /vendor/
+/docs/load-testing/results/**/*.json
+/test/k6/results/**/*.json
 /.vscode

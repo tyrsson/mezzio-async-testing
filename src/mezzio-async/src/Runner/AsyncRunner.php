@@ -9,6 +9,7 @@ use Mezzio\Async\Http\RequestParser;
 use Mezzio\Async\Http\ResponseEmitter;
 use Mezzio\Async\Http\Server;
 use Mezzio\Async\Http\StaticFileHandler;
+use Monolog\Logger;
 use Psr\Http\Server\RequestHandlerInterface;
 use Psr\Log\LoggerInterface;
 use Throwable;
@@ -18,6 +19,7 @@ use function hrtime;
 use function is_resource;
 use function round;
 use function sprintf;
+use function strtolower;
 
 /**
  * Integrates the Mezzio pipeline with the TrueAsync HTTP server.
@@ -33,7 +35,7 @@ final readonly class AsyncRunner implements RequestHandlerRunnerInterface
         private RequestParser $parser,
         private ResponseEmitter $emitter,
         private StaticFileHandler $staticFiles,
-        private LoggerInterface $logger,
+        private LoggerInterface&Logger $logger,
         private Server $server,
     ) {}
 
@@ -44,64 +46,79 @@ final readonly class AsyncRunner implements RequestHandlerRunnerInterface
 
     private function handleConnection(mixed $conn, string $peerName): void
     {
-        // Clock starts at connection entry — measures read + parse + dispatch + emit.
-        $startNs = hrtime(true);
-
-        // Parse is kept outside the logging try/finally intentionally.
-        // Browser speculative pre-connects open a TCP connection but never send data,
-        // causing parse() to return null. These should be silently dropped — no log entry.
-        // Parse errors (mid-stream disconnect) are caught here too and closed quietly.
+        // Outer try/finally owns the connection lifetime — fclose runs exactly once
+        // regardless of how many requests were served or how the loop exits.
         try {
-            $request = $this->parser->parse($conn, $peerName);
-        } catch (Throwable $e) {
-            $this->logger->warning('Parse error from ' . $peerName, ['exception' => $e]);
-            fclose($conn);
-            return;
-        }
+            while (true) {
+                // Parse OUTSIDE per-request logging — null = clean close (speculative
+                // pre-connect or keep-alive idle), no log entry should be produced.
+                try {
+                    $request = $this->parser->parse($conn, $peerName);
+                } catch (Throwable $e) {
+                    $this->logger->warning('Parse error from ' . $peerName, ['exception' => $e]);
+                    break;
+                }
 
-        if ($request === null) {
-            // Speculative pre-connect — no bytes were ever sent
-            fclose($conn);
-            return;
-        }
+                if ($request === null) {
+                    // Clean close — speculative pre-connect or client closed idle connection
+                    break;
+                }
 
-        // From here on we have a real request; always log it.
-        $method    = $request->getMethod();
-        $target    = $request->getRequestTarget();
-        $status    = 500;
-        $isStatic  = false;
+                // Real request — always log it
+                $method    = $request->getMethod();
+                $target    = $request->getRequestTarget();
+                $startNs   = hrtime(true);
+                $status    = 500;
+                $isStatic  = false;
+                $keepAlive = true;
 
-        try {
-            if ($this->staticFiles->tryServe($method, $target, $conn)) {
-                $isStatic = true;
-                $status   = 200;
-                return;
-            }
+                try {
+                    $isHttp10   = $request->getProtocolVersion() === '1.0';
+                    $connHeader = strtolower($request->getHeaderLine('Connection'));
+                    $keepAlive  = ! $isHttp10 && $connHeader !== 'close';
 
-            $response = $this->handler->handle($request);
-            $status   = $response->getStatusCode();
-            $this->emitter->emit($response, $conn);
-        } catch (Throwable $e) {
-            $this->logger->error('Request error from ' . $peerName, ['exception' => $e]);
-            if (is_resource($conn)) {
-                $this->emitter->emitError($conn, 500, 'Internal Server Error');
+                    if ($this->staticFiles->tryServe($method, $target, $conn)) {
+                        // Static handler writes its own complete response including
+                        // Connection: close — break out of the keep-alive loop.
+                        $isStatic  = true;
+                        $status    = 200;
+                        $keepAlive = false;
+                        break;
+                    }
+
+                    $response  = $this->handler->handle($request);
+                    $status    = $response->getStatusCode();
+                    $response  = $response->withHeader('Connection', $keepAlive ? 'keep-alive' : 'close');
+                    $keepAlive = $this->emitter->emit($response, $conn) && $keepAlive;
+                } catch (Throwable $e) {
+                    $this->logger->error('Request error from ' . $peerName, ['exception' => $e]);
+                    if (is_resource($conn)) {
+                        $this->emitter->emitError($conn, 500, 'Internal Server Error');
+                    }
+                    $keepAlive = false;
+                } finally {
+                    if (! $isStatic) {
+                        $ms = round((hrtime(true) - $startNs) / 1_000_000, 2);
+                        $this->logger->info(sprintf(
+                            '%s %s %d %sms %s',
+                            $method,
+                            $target,
+                            $status,
+                            $ms,
+                            $peerName,
+                        ));
+                    }
+                }
+
+                if (! $keepAlive) {
+                    break;
+                }
             }
         } finally {
             if (is_resource($conn)) {
                 fclose($conn);
             }
-
-            if (! $isStatic) {
-                $ms = round((hrtime(true) - $startNs) / 1_000_000, 2);
-                $this->logger->info(sprintf(
-                    '%s %s %d %sms %s',
-                    $method,
-                    $target,
-                    $status,
-                    $ms,
-                    $peerName,
-                ));
-            }
+            $this->logger->close();
         }
     }
 }
