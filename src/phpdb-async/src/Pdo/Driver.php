@@ -10,6 +10,7 @@ use PhpDb\Adapter\Driver\Pdo\Statement;
 use PhpDb\Adapter\Driver\PdoDriverAwareInterface;
 use PhpDb\Adapter\Driver\ResultInterface;
 use PhpDb\Adapter\Driver\StatementInterface;
+use PhpDb\Pgsql\Pdo\Connection;
 use RuntimeException;
 
 use function extension_loaded;
@@ -70,6 +71,6 @@ final class Driver extends \PhpDb\Pgsql\Pdo\Driver
             ],
         );
 
-        parent::__construct($pdo, $statementPrototype, $resultPrototype);
+        parent::__construct(new Connection($pdo), $statementPrototype, $resultPrototype);
     }
 }

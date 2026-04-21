@@ -284,7 +284,13 @@ final class PdoHandler implements RequestHandlerInterface
 
             return $this->renderResponse($results, $queryProfiles, $totalMs, $config['response'] ?? 'html');
         } catch (Throwable $e) {
-            return new Response\JsonResponse(['error' => $e->getMessage()], 500);
+                return new Response\JsonResponse([
+                    'error'   => $e->getMessage(),
+                    'class'   => get_class($e),
+                    'file'    => $e->getFile(),
+                    'line'    => $e->getLine(),
+                    'trace'   => $e->getTraceAsString(),
+                ], 500);
         }
     }
 
