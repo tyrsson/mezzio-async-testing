@@ -9,3 +9,4 @@
 /phpunit.xml
 /vendor/
 /.vscode
+/k6-v0.56.0-linux-amd64

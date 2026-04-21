@@ -9,6 +9,7 @@ use Mezzio\Async\Http\RequestParser;
 use Mezzio\Async\Http\ResponseEmitter;
 use Mezzio\Async\Http\Server;
 use Mezzio\Async\Http\StaticFileHandler;
+use Monolog\Logger;
 use Psr\Http\Server\RequestHandlerInterface;
 use Psr\Log\LoggerInterface;
 use Throwable;
@@ -33,7 +34,7 @@ final readonly class AsyncRunner implements RequestHandlerRunnerInterface
         private RequestParser $parser,
         private ResponseEmitter $emitter,
         private StaticFileHandler $staticFiles,
-        private LoggerInterface $logger,
+        private LoggerInterface&Logger $logger,
         private Server $server,
     ) {}
 
@@ -102,6 +103,7 @@ final readonly class AsyncRunner implements RequestHandlerRunnerInterface
                     $peerName,
                 ));
             }
+            $this->logger->close();
         }
     }
 }
