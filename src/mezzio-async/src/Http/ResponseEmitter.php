@@ -45,23 +45,32 @@ final readonly class ResponseEmitter
             }
         }
 
-        fwrite($socket, sprintf(
+        // Use @ to suppress broken-pipe warnings — the return value tells us if the write failed.
+        if (@fwrite($socket, sprintf(
             "HTTP/%s %d %s\r\n",
             $response->getProtocolVersion(),
             $response->getStatusCode(),
             $response->getReasonPhrase(),
-        ));
+        )) === false) {
+            return false;
+        }
 
         foreach ($response->getHeaders() as $name => $values) {
             foreach ($values as $value) {
-                fwrite($socket, "{$name}: {$value}\r\n");
+                if (@fwrite($socket, "{$name}: {$value}\r\n") === false) {
+                    return false;
+                }
             }
         }
 
-        fwrite($socket, "\r\n");
+        if (@fwrite($socket, "\r\n") === false) {
+            return false;
+        }
 
         while (! $body->eof()) {
-            fwrite($socket, $body->read(65_536));
+            if (@fwrite($socket, $body->read(65_536)) === false) {
+                return false;
+            }
         }
 
         // Signal whether the caller should keep the connection alive
@@ -71,6 +80,6 @@ final readonly class ResponseEmitter
 
     public function emitError(mixed $socket, int $status, string $reason): void
     {
-        fwrite($socket, "HTTP/1.1 {$status} {$reason}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+        @fwrite($socket, "HTTP/1.1 {$status} {$reason}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
     }
 }

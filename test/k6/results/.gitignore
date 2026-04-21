@@ -1,0 +1,3 @@
+# k6 raw output — do not commit
+*.json
+*.csv

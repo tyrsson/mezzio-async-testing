@@ -1,0 +1,22 @@
+# docker-compose.loadtest.yml
+#
+# Compose override for k6 load testing:
+#   - Swaps in load-test-safe PHP config (xdebug off, display_errors off)
+#   - Adds a k6 service with test scripts mounted at /scripts
+#
+# Standalone usage (outside devcontainer):
+#   docker compose -f docker-compose.yml -f docker-compose.loadtest.yml up -d --build
+#   docker compose -f docker-compose.yml -f docker-compose.loadtest.yml exec k6 k6 run /scripts/baseline.js
+#   docker compose -f docker-compose.yml -f docker-compose.loadtest.yml down
+#
+# Inside devcontainer (docker-compose.loadtest.yml is already in the compose chain):
+#   docker compose exec k6 k6 run /scripts/baseline.js
+#   docker compose exec k6 k6 run --out json=/scripts/results/ramp.json /scripts/ramp.js
+
+services:
+    php:
+        volumes:
+            - './docker/php/conf.d/xdebug-loadtest.ini:/etc/php.d/xdebug.ini'
+            - './docker/php/conf.d/error_reporting.loadtest.ini:/etc/php.d/error_reporting.ini'
+
+

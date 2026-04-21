@@ -7,7 +7,8 @@
 	// The .devcontainer/docker-compose.yml file contains any overrides you need/want to make.
 	"dockerComposeFile": [
 		"../docker-compose.yml",
-		"docker-compose.yml"
+		"docker-compose.yml",
+		"../docker-compose.loadtest.yml"
 	],
 
 	// The 'service' property is the name of the service for the container that VS Code should
@@ -19,7 +20,10 @@
 	"workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
 	"features": {
 		"ghcr.io/devcontainers-extra/features/composer:1": {},
-		"ghcr.io/devcontainers/features/git:1": {}
+		"ghcr.io/devcontainers/features/git:1": {},
+		"ghcr.io/dhoeric/features/k6:1": {
+			"version": "0.56.0"
+		}
 	},
 
 	// Features to add to the dev container. More info: https://containers.dev/features.
@@ -44,7 +48,8 @@
 			// List of extensions to install in the container.
 			"extensions": [
 				"xdebug.php-debug",
-				"bmewburn.vscode-intelephense-client"
+				"bmewburn.vscode-intelephense-client",
+				"jaguadoromero.vscode-php-create-class"
 			],
 			"launch.configurations": [
 				{
@@ -56,6 +61,7 @@
 			]
 		}
 	},
+	//"remoteUser": "root",
 	"postCreateCommand": "composer install --ignore-platform-req=php --no-interaction",
 	"postStartCommand": "git config --global --add safe.directory /workspaces/mezzio-async-testing"
 }

@@ -11,3 +11,4 @@
 /docs/load-testing/results/**/*.json
 /test/k6/results/**/*.json
 /.vscode
+/k6-v0.56.0-linux-amd64

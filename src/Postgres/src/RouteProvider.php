@@ -35,5 +35,11 @@ final class RouteProvider implements RouteProviderInterface
             $middlewareFactory->prepare(Handler\PdoHandler::class),
             'postgres.pdo'
         );
+
+        $routeCollector->get(
+            '/postgres/spawn',
+            $middlewareFactory->prepare(Handler\SpawnHandler::class),
+            'postgres.spawn'
+        );
     }
 }
