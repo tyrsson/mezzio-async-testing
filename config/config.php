@@ -37,6 +37,8 @@ $aggregator = new ConfigAggregator([
             return [];
         },
     Mezzio\Async\ConfigProvider::class,
+    // Postgres benchmark module
+    Postgres\ConfigProvider::class,
     // Default App module config
     ConfigProvider::class,
     // Load application config in a pre-defined order in such a way that local settings

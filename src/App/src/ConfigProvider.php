@@ -14,9 +14,6 @@ declare(strict_types=1);
 
 namespace App;
 
-use PhpDb\Adapter\AdapterInterface;
-use PhpDb\Pgsql\Driver;
-
 /**
  * @phpstan-type dependencyArray array{
  *                      delegators?: array<class-string, list<class-string>>,
@@ -48,40 +45,6 @@ class ConfigProvider
             'dependencies' => $this->getDependencies(),
             'router'       => $this->getRouteProviders(),
             'templates'    => $this->getTemplates(),
-            AdapterInterface::class => [
-                // Informational — PhpDb\Async\Container\AdapterFactory builds
-                // PhpDb\Async\Pgsql\Connection directly; the driver key documents
-                // which native driver is in use.
-                'driver'     => Driver::class,
-                'connection' => [
-                    'host'     => 'postgres',
-                    'port'     => 5432,
-                    'database' => 'phpdb_test',
-                    'username' => 'postgres',
-                    'password' => 'postgres',
-                ],
-                'pool'       => [
-                    'min'                     => 2,
-                    'max'                     => 10,
-                    'healthcheck_interval_ms' => 30_000,
-                ],
-            ],
-            // Keys match k6 script filenames — switch modes via ?mode=<key>.
-            // No config-cache clear or server restart needed to switch modes.
-            'postgres-benchmark'    => [
-                // 4 queries run sequentially (no coroutines).
-                // totalMs ≈ sum(elapsed_ms) — the sequential control case.
-                'baseline'   => ['concurrent' => false, 'response' => 'html'],
-                // 4 queries spawned as coroutines via await_all_or_fail.
-                // totalMs ≈ max(elapsed_ms) when queries overlap correctly.
-                'concurrent' => ['concurrent' => true,  'response' => 'html'],
-                // concurrent + JSON response only (no template rendering overhead).
-                'stress'     => ['concurrent' => true,  'response' => 'json'],
-                // concurrent + JSON, higher VU count in k6 ramp script.
-                'ramp'       => ['concurrent' => true,  'response' => 'json'],
-                // same as concurrent for long-duration soak runs.
-                'soak'       => ['concurrent' => true,  'response' => 'html'],
-            ],
         ];
     }
 
@@ -95,7 +58,6 @@ class ConfigProvider
         return [
             'factories'  => [
                 Handler\HomePageHandler::class => Container\HomePageHandlerFactory::class,
-                Handler\PostgresHandler::class => Container\PostgresHandlerFactory::class,
                 RouteProvider::class           => Container\RouteProviderFactory::class,
             ],
             'invokables' => [
@@ -129,7 +91,6 @@ class ConfigProvider
             'map'            => [
                 'layout::default' => __DIR__ . '/../templates/layout/default.phtml',
                 'app::home-page'  => __DIR__ . '/../templates/app/home-page.phtml',
-                'app::postgres'   => __DIR__ . '/../templates/app/postgres.phtml',
                 'error::404'      => __DIR__ . '/../templates/error/404.phtml',
                 'error::error'    => __DIR__ . '/../templates/error/error.phtml',
             ],

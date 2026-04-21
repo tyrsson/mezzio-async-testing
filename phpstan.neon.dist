@@ -14,5 +14,5 @@ parameters:
         - stubs/Laminas/ServiceManager/Factory/InvokableFactory.stub
         - stubs/Laminas/ServiceManager/Initializer/InitializerInterface.stub
         - stubs/Psr/Container/ContainerInterface.stub
-        - ../../Github/Personal_Account/php-async/ide-stubs/async.php
+        - stubs/pdo-async.php
     treatPhpDocTypesAsCertain: false

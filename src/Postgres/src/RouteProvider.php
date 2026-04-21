@@ -12,7 +12,7 @@ declare(strict_types=1);
  * file that was distributed with this source code.
  */
 
-namespace App;
+namespace Postgres;
 
 use Mezzio\MiddlewareFactoryInterface;
 use Mezzio\Router\RouteCollectorInterface;
@@ -25,19 +25,15 @@ final class RouteProvider implements RouteProviderInterface
         MiddlewareFactoryInterface $middlewareFactory,
     ): void {
         $routeCollector->get(
-            '/',
-            $middlewareFactory->prepare(
-                Handler\HomePageHandler::class
-            ),
-            'home'
+            '/postgres/pgsql',
+            $middlewareFactory->prepare(Handler\PgsqlHandler::class),
+            'postgres.pgsql'
         );
 
         $routeCollector->get(
-            '/ping',
-            $middlewareFactory->prepare(
-                Handler\PingHandler::class
-            ),
-            'api.ping'
+            '/postgres/pdo',
+            $middlewareFactory->prepare(Handler\PdoHandler::class),
+            'postgres.pdo'
         );
     }
 }

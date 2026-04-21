@@ -33,9 +33,11 @@ final class ConfigProvider
             ],
             'factories'          => [
                 Adapter::class => Container\AdapterFactory::class,
+                'pdo-adapter'  => Container\PdoAdapterFactory::class,
             ],
             'abstract_factories' => [
                 Container\AbstractAdapterFactory::class,
+                Container\PdoAbstractAdapterFactory::class,
             ],
         ];
     }
