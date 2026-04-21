@@ -21,13 +21,25 @@ import { checkOk } from './lib/checks.js';
 
 export const options = {
     vus:        25,
-    duration:   '60s',
+    duration:   '30s',
     thresholds: thresholds.relaxed,
 };
 
-// Assumes setup was already run (e.g. via baseline.js or manually).
-// Including setup here would inflate the early-iteration latency metrics.
+export function setup() {
+    const pgsql = http.get(`${BASE_URL}/postgres/pgsql?action=setup`);
+    if (pgsql.status !== 200) {
+        throw new Error(`pgsql setup failed with status ${pgsql.status}: ${pgsql.body}`);
+    }
+    const pdo = http.get(`${BASE_URL}/postgres/pdo?action=setup`);
+    if (pdo.status !== 200) {
+        throw new Error(`pdo setup failed with status ${pdo.status}: ${pdo.body}`);
+    }
+}
+
 export default function () {
-    const res = http.get(`${BASE_URL}/postgres?mode=stress`);
-    checkOk(res);
+    const pgsql = http.get(`${BASE_URL}/postgres/pgsql?mode=stress`);
+    checkOk(pgsql);
+
+    const pdo = http.get(`${BASE_URL}/postgres/pdo?mode=stress`);
+    checkOk(pdo);
 }

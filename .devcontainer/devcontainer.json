@@ -57,6 +57,6 @@
 			]
 		}
 	},
-	"postCreateCommand": "composer install --ignore-platform-req=php --no-interaction",
+	"postCreateCommand": "composer install --ignore-platform-req=php --no-interaction && curl -L https://github.com/grafana/k6/releases/download/v0.56.0/k6-v0.56.0-linux-amd64.tar.gz | tar xz && mv k6-v0.56.0-linux-amd64/k6 /usr/local/bin/k6",
 	"postStartCommand": "git config --global --add safe.directory /workspaces/mezzio-async-testing"
 }

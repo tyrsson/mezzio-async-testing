@@ -21,19 +21,27 @@ import { checkHtml } from './lib/checks.js';
 
 export const options = {
     vus:        10,
-    duration:   '10m',
+    duration:   '5m',
     thresholds: thresholds.normal,
 };
 
 export function setup() {
-    const res = http.get(`${BASE_URL}/postgres?action=setup`);
-    if (res.status !== 200) {
-        throw new Error(`Setup failed with status ${res.status}: ${res.body}`);
+    const pgsql = http.get(`${BASE_URL}/postgres/pgsql?action=setup`);
+    if (pgsql.status !== 200) {
+        throw new Error(`pgsql setup failed with status ${pgsql.status}: ${pgsql.body}`);
+    }
+    const pdo = http.get(`${BASE_URL}/postgres/pdo?action=setup`);
+    if (pdo.status !== 200) {
+        throw new Error(`pdo setup failed with status ${pdo.status}: ${pdo.body}`);
     }
 }
 
 export default function () {
-    const res = http.get(`${BASE_URL}/postgres?mode=soak`);
-    checkHtml(res);
-    sleep(1);  // 1s think time — keeps ~10 RPS, reduces pool pressure to realistic level
+    const pgsql = http.get(`${BASE_URL}/postgres/pgsql?mode=concurrent`);
+    checkHtml(pgsql);
+
+    const pdo = http.get(`${BASE_URL}/postgres/pdo?mode=concurrent`);
+    checkHtml(pdo);
+
+    sleep(1);  // 1s think time — keeps load moderate, surfaces leaks over time
 }

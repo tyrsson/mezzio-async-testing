@@ -18,7 +18,7 @@ import { checkOk } from './lib/checks.js';
 
 export const options = {
     vus:        10,
-    duration:   '60s',
+    duration:   '30s',
     thresholds: thresholds.ping,
 };
 

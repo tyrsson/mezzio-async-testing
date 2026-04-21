@@ -36,7 +36,7 @@ final class ConfigProvider
                 ],
                 'pool' => [
                     'min'                     => 2,
-                    'max'                     => 10,
+                    'max'                     => 100,
                     'healthcheck_interval_ms' => 30_000,
                 ],
             ],
@@ -48,7 +48,7 @@ final class ConfigProvider
                 ],
                 'pool' => [
                     'min'                  => 2,
-                    'max'                  => 10,
+                    'max'                  => 100,
                     'healthcheck_interval' => 30,
                 ],
             ],
@@ -59,9 +59,10 @@ final class ConfigProvider
     {
         return [
             'factories' => [
-                Handler\PgsqlHandler::class => Container\PgsqlHandlerFactory::class,
-                Handler\PdoHandler::class   => Container\PdoHandlerFactory::class,
-                RouteProvider::class        => Container\RouteProviderFactory::class,
+                Handler\PgsqlHandler::class  => Container\PgsqlHandlerFactory::class,
+                Handler\PdoHandler::class    => Container\PdoHandlerFactory::class,
+                Handler\SpawnHandler::class  => Container\SpawnHandlerFactory::class,
+                RouteProvider::class         => Container\RouteProviderFactory::class,
             ],
         ];
     }

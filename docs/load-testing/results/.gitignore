@@ -1,0 +1,3 @@
+# Raw k6 JSON output files are too large to commit (hundreds of MB each).
+# All meaningful data is captured in the *-summary.md files.
+**/*.json
