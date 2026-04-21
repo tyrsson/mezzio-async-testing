@@ -1,0 +1,142 @@
+<?php
+
+declare(strict_types=1);
+
+/**
+ * @var array  $profiles    [ ['label'=>string, 'sql'=>string, 'elapsed_ms'=>float|null, 'wall_start'=>float|null] ]
+ * @var float  $totalMs     Wall time for the full TaskGroup::all() block (ms)
+ * @var array  $users       Rows from bm_users
+ * @var array  $products    Rows from bm_products
+ * @var array  $orders      Rows from bm_orders (with username)
+ * @var array  $topProducts Top products by revenue
+ */
+
+$fmt = static fn(?float $ms): string => $ms !== null ? number_format($ms, 3) . ' ms' : '—';
+$esc = static fn(string $v): string => htmlspecialchars($v, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+$truncateSql = static function (string $sql): string {
+    $sql = preg_replace('/\s+/', ' ', trim($sql));
+    return strlen($sql) > 120 ? substr($sql, 0, 117) . '...' : $sql;
+};
+
+$this->layout('layout::default', ['title' => 'PostgreSQL Benchmark — pgsql native']);
+?>
+
+<main class="container" style="margin-top: 2rem;">
+
+    <hgroup>
+        <h1>PostgreSQL Concurrent Query Benchmark <small>— pgsql native</small></h1>
+        <p>Four independent SELECT queries executed as concurrent TrueAsync coroutines via <code>Async\TaskGroup::all()</code> using the native <code>pgsql</code> extension pool (<code>Async\Pool</code>).</p>
+    </hgroup>
+
+    <!-- ── Timing summary ─────────────────────────────────────────────── -->
+    <section>
+        <h2>Query Profiles</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Query</th>
+                    <th>SQL (truncated)</th>
+                    <th style="text-align:right;">Elapsed</th>
+                    <th style="text-align:right;">Started at</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php foreach ($profiles as $p): ?>
+                <tr>
+                    <td><?= $esc($p['label']) ?></td>
+                    <td><code style="font-size:0.8em;"><?= $esc($truncateSql($p['sql'])) ?></code></td>
+                    <td style="text-align:right;"><?= $esc($fmt($p['elapsed_ms'])) ?></td>
+                    <td style="text-align:right;"><?= $p['wall_start'] !== null ? date('H:i:s.', (int)$p['wall_start']) . str_pad((string)round(fmod($p['wall_start'], 1) * 1000), 3, '0', STR_PAD_LEFT) : '—' ?></td>
+                </tr>
+                <?php endforeach; ?>
+            </tbody>
+            <tfoot>
+                <tr>
+                    <th colspan="2">Total wall time (TaskGroup::all())</th>
+                    <th colspan="2" style="text-align:right;"><?= $esc(number_format($totalMs, 2) . ' ms') ?></th>
+                </tr>
+            </tfoot>
+        </table>
+    </section>
+
+    <!-- ── Users ──────────────────────────────────────────────────────── -->
+    <section>
+        <h2>Users <small>(top 20)</small></h2>
+        <table>
+            <thead>
+                <tr><th>ID</th><th>Username</th><th>Email</th><th>Created</th></tr>
+            </thead>
+            <tbody>
+                <?php foreach ($users as $row): ?>
+                <tr>
+                    <td><?= (int) $row['id'] ?></td>
+                    <td><?= $esc((string) $row['username']) ?></td>
+                    <td><?= $esc((string) $row['email']) ?></td>
+                    <td><?= $esc((string) $row['created_at']) ?></td>
+                </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+    </section>
+
+    <!-- ── Products ───────────────────────────────────────────────────── -->
+    <section>
+        <h2>Products <small>(top 20 by price)</small></h2>
+        <table>
+            <thead>
+                <tr><th>ID</th><th>Name</th><th style="text-align:right;">Price</th><th style="text-align:right;">Stock</th></tr>
+            </thead>
+            <tbody>
+                <?php foreach ($products as $row): ?>
+                <tr>
+                    <td><?= (int) $row['id'] ?></td>
+                    <td><?= $esc((string) $row['name']) ?></td>
+                    <td style="text-align:right;">$<?= $esc(number_format((float) $row['price'], 2)) ?></td>
+                    <td style="text-align:right;"><?= (int) $row['stock'] ?></td>
+                </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+    </section>
+
+    <!-- ── Recent Orders ──────────────────────────────────────────────── -->
+    <section>
+        <h2>Recent Orders <small>(top 20)</small></h2>
+        <table>
+            <thead>
+                <tr><th>ID</th><th>User</th><th style="text-align:right;">Total</th><th>Status</th><th>Created</th></tr>
+            </thead>
+            <tbody>
+                <?php foreach ($orders as $row): ?>
+                <tr>
+                    <td><?= (int) $row['id'] ?></td>
+                    <td><?= $esc((string) $row['username']) ?></td>
+                    <td style="text-align:right;">$<?= $esc(number_format((float) $row['total'], 2)) ?></td>
+                    <td><?= $esc((string) $row['status']) ?></td>
+                    <td><?= $esc((string) $row['created_at']) ?></td>
+                </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+    </section>
+
+    <!-- ── Top Products by Revenue ────────────────────────────────────── -->
+    <section>
+        <h2>Top Products by Revenue <small>(top 10)</small></h2>
+        <table>
+            <thead>
+                <tr><th>Product</th><th style="text-align:right;">Revenue</th><th style="text-align:right;">Units Sold</th></tr>
+            </thead>
+            <tbody>
+                <?php foreach ($topProducts as $row): ?>
+                <tr>
+                    <td><?= $esc((string) $row['name']) ?></td>
+                    <td style="text-align:right;">$<?= $esc(number_format((float) $row['revenue'], 2)) ?></td>
+                    <td style="text-align:right;"><?= (int) $row['units_sold'] ?></td>
+                </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+    </section>
+
+</main>

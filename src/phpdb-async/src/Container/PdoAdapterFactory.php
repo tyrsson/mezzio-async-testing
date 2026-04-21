@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace PhpDb\Async\Container;
 
-use PhpDb\Adapter\Adapter as CoreAdapter;
+use PhpDb\Adapter\Adapter;
 use PhpDb\Adapter\AdapterInterface;
 use PhpDb\Async\Pdo;
 use PhpDb\Pgsql\AdapterPlatform;
@@ -56,6 +56,6 @@ final class PdoAdapterFactory
         );
         $platform = new AdapterPlatform($driver);
 
-        return new CoreAdapter($driver, $platform);
+        return new Adapter($driver, $platform);
     }
 }

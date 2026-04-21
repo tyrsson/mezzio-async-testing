@@ -12,11 +12,13 @@ declare(strict_types=1);
  * file that was distributed with this source code.
  */
 
-namespace App\Handler;
+namespace Postgres\Handler;
 
+use Async\TaskGroup;
 use Laminas\Diactoros\Response;
 use Mezzio\Template\TemplateRendererInterface;
-use PhpDb\Async\Adapter;
+use PhpDb\Adapter\Adapter;
+use PhpDb\Adapter\AdapterInterface;
 use PhpDb\Async\Profiler\Profiler;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
@@ -24,11 +26,8 @@ use Psr\Http\Server\RequestHandlerInterface;
 use RuntimeException;
 use Throwable;
 
-use PhpDb\Adapter\AdapterInterface;
-
-use Async\TaskGroup;
-
 use function array_keys;
+use function array_values;
 use function compact;
 use function count;
 use function file_get_contents;
@@ -38,17 +37,21 @@ use function round;
 
 use const JSON_THROW_ON_ERROR;
 
-final class PostgresHandler implements RequestHandlerInterface
+/**
+ * Benchmark handler using the PDO pool adapter (PDO::ATTR_POOL_ENABLED).
+ *
+ * Route: GET /postgres/pdo[?action=setup|teardown&mode=concurrent|baseline|stress]
+ */
+final class PdoHandler implements RequestHandlerInterface
 {
     private const SEED_FILE = __DIR__ . '/../../../../data/postgres/seed.json';
 
     /**
-     * Benchmark execution modes, keyed to match k6 script filenames.
-     * Injected from config['postgres-benchmark']; these are the defaults.
+     * Benchmark execution modes.
      *
-     * concurrent  — 4 queries spawned as coroutines via Async\TaskGroup::all(); HTML response
-     * baseline    — 4 queries run sequentially (no spawn); proves totalMs ≈ sum(query_ms)
-     * stress      — concurrent queries, JSON response (no template overhead)
+     * concurrent  — 4 queries as TaskGroup coroutines; HTML response
+     * baseline    — 4 queries sequentially; proves totalMs ≈ sum(query_ms)
+     * stress      — concurrent; JSON only (no template overhead)
      */
     private const DEFAULT_MODES = [
         'concurrent' => ['concurrent' => true,  'response' => 'html'],
@@ -56,24 +59,19 @@ final class PostgresHandler implements RequestHandlerInterface
         'stress'     => ['concurrent' => true,  'response' => 'json'],
     ];
 
-    /**
-     * The four benchmark SELECT queries in execution order.
-     * Shared between the concurrent and sequential paths.
-     *
-     * @var array<string, string>
-     */
+    /** @var array<string, string> */
     private const QUERIES = [
-        'Users (top 20 by id)'            =>
+        'Users (top 20 by id)'             =>
             'SELECT id, username, email, created_at
                FROM bm_users
               ORDER BY id
               LIMIT 20',
-        'Products (top 20 by price)'      =>
+        'Products (top 20 by price)'       =>
             'SELECT id, name, price, stock
                FROM bm_products
               ORDER BY price DESC
               LIMIT 20',
-        'Recent orders (top 20)'          =>
+        'Recent orders (top 20)'           =>
             'SELECT o.id, o.total, o.status, o.created_at, u.username
                FROM bm_orders o
                JOIN bm_users u ON u.id = o.user_id
@@ -89,10 +87,6 @@ final class PostgresHandler implements RequestHandlerInterface
               ORDER BY revenue DESC
               LIMIT 10',
     ];
-
-    // -------------------------------------------------------------------------
-    // DDL — PostgreSQL-specific; BIGSERIAL provides auto-increment PK
-    // -------------------------------------------------------------------------
 
     private const DDL_USERS = <<<SQL
         CREATE TABLE IF NOT EXISTS bm_users (
@@ -142,7 +136,7 @@ final class PostgresHandler implements RequestHandlerInterface
     public function handle(ServerRequestInterface $request): ResponseInterface
     {
         if (! $this->dbAdapter instanceof Adapter) {
-            return new Response\JsonResponse(['error' => 'No database adapter configured'], 503);
+            return new Response\JsonResponse(['error' => 'No PDO adapter configured'], 503);
         }
 
         $params = $request->getQueryParams();
@@ -156,13 +150,8 @@ final class PostgresHandler implements RequestHandlerInterface
         };
     }
 
-    // -------------------------------------------------------------------------
-    // Setup / Teardown
-    // -------------------------------------------------------------------------
-
     private function setup(): ResponseInterface
     {
-        // Create tables in FK-dependency order
         foreach ([self::DDL_USERS, self::DDL_PRODUCTS, self::DDL_ORDERS, self::DDL_ORDER_ITEMS] as $ddl) {
             $this->dbAdapter->query($ddl, AdapterInterface::QUERY_MODE_EXECUTE);
         }
@@ -175,7 +164,6 @@ final class PostgresHandler implements RequestHandlerInterface
 
     private function teardown(): ResponseInterface
     {
-        // Drop in reverse FK-dependency order
         foreach (['bm_order_items', 'bm_orders', 'bm_products', 'bm_users'] as $table) {
             $this->dbAdapter->query(
                 "DROP TABLE IF EXISTS {$table}",
@@ -198,17 +186,11 @@ final class PostgresHandler implements RequestHandlerInterface
 
     private function seed(array $data): array
     {
-        // Reset all data and restart sequences for deterministic IDs
         $this->dbAdapter->query(
             'TRUNCATE bm_order_items, bm_orders, bm_products, bm_users RESTART IDENTITY CASCADE',
             AdapterInterface::QUERY_MODE_EXECUTE
         );
 
-        // Use QUERY_MODE_EXECUTE with platform quoting to avoid the shallow-clone
-        // ParameterContainer accumulation bug in PhpDb\Pgsql\Statement (no __clone()).
-        // TableGateway::insert() → Sql::prepareStatementForSqlObject() →
-        // Driver::createStatement() shallow-clones the prototype, sharing the PC;
-        // switching tables causes cross-table key accumulation → wrong param count.
         $p = $this->dbAdapter->getPlatform();
 
         foreach ($data['users'] as $row) {
@@ -270,23 +252,11 @@ final class PostgresHandler implements RequestHandlerInterface
         ];
     }
 
-    // -------------------------------------------------------------------------
-    // Benchmark query dispatch
-    //
-    // ?mode=concurrent  — 4 coroutines via await_all_or_fail; HTML (default)
-    // ?mode=baseline    — 4 queries run sequentially; HTML; proves sum vs max
-    // ?mode=stress      — concurrent; JSON only (no template overhead)
-    //
-    // Additional modes can be added to config['postgres-benchmark'] without
-    // restarting the server or clearing the config cache.
-    // -------------------------------------------------------------------------
-
     private function query(string $mode): ResponseInterface
     {
         $modes  = $this->benchmarkModes !== [] ? $this->benchmarkModes : self::DEFAULT_MODES;
         $config = $modes[$mode] ?? $modes['concurrent'];
 
-        // Build one Profiler per query, keyed by label
         $profilers = [];
         foreach (array_keys(self::QUERIES) as $label) {
             $profilers[$label] = new Profiler();
@@ -319,9 +289,6 @@ final class PostgresHandler implements RequestHandlerInterface
     }
 
     /**
-     * Spawn all four queries as independent TrueAsync coroutines via TaskGroup.
-     * totalMs ≈ max(individual elapsed_ms) when I/O overlaps correctly.
-     *
      * @param array<string, Profiler> $profilers
      * @return array{users: array, products: array, orders: array, topProducts: array}
      */
@@ -330,9 +297,9 @@ final class PostgresHandler implements RequestHandlerInterface
         $group = new TaskGroup();
 
         $group->spawnWithKey('users',       fn() => $this->fetchRows(self::QUERIES['Users (top 20 by id)'],              $profilers['Users (top 20 by id)']));
-        $group->spawnWithKey('products',    fn() => $this->fetchRows(self::QUERIES['Products (top 20 by price)'],       $profilers['Products (top 20 by price)']));
-        $group->spawnWithKey('orders',      fn() => $this->fetchRows(self::QUERIES['Recent orders (top 20)'],           $profilers['Recent orders (top 20)']));
-        $group->spawnWithKey('topProducts', fn() => $this->fetchRows(self::QUERIES['Top products by revenue (top 10)'], $profilers['Top products by revenue (top 10)']));
+        $group->spawnWithKey('products',    fn() => $this->fetchRows(self::QUERIES['Products (top 20 by price)'],        $profilers['Products (top 20 by price)']));
+        $group->spawnWithKey('orders',      fn() => $this->fetchRows(self::QUERIES['Recent orders (top 20)'],            $profilers['Recent orders (top 20)']));
+        $group->spawnWithKey('topProducts', fn() => $this->fetchRows(self::QUERIES['Top products by revenue (top 10)'],  $profilers['Top products by revenue (top 10)']));
 
         /** @var array{users: array, products: array, orders: array, topProducts: array} $results */
         $results = $group->all()->await();
@@ -340,9 +307,6 @@ final class PostgresHandler implements RequestHandlerInterface
     }
 
     /**
-     * Run all four queries sequentially (no spawn).
-     * totalMs ≈ sum(individual elapsed_ms) — the control case for the benchmark.
-     *
      * @param array<string, Profiler> $profilers
      * @return array{users: array, products: array, orders: array, topProducts: array}
      */
@@ -362,7 +326,7 @@ final class PostgresHandler implements RequestHandlerInterface
     private function renderResponse(array $results, array $queryProfiles, float $totalMs, string $responseType): ResponseInterface
     {
         if ($responseType === 'html' && $this->template !== null) {
-            $html = $this->template->render('app::postgres', [
+            $html = $this->template->render('postgres::pdo', [
                 'users'       => $results['users'],
                 'products'    => $results['products'],
                 'orders'      => $results['orders'],
