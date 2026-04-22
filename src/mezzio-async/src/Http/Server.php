@@ -15,10 +15,15 @@ use function Async\await_any_or_fail;
 use function Async\signal;
 use function Async\spawn;
 use function fclose;
+use function socket_import_stream;
+use function socket_set_option;
 use function sprintf;
 use function stream_context_create;
 use function stream_socket_accept;
 use function stream_socket_server;
+
+use const SOL_TCP;
+use const TCP_NODELAY;
 
 use const STREAM_SERVER_BIND;
 use const STREAM_SERVER_LISTEN;
@@ -48,7 +53,7 @@ final readonly class Server
      */
     public function listen(callable $connectionHandler): void
     {
-        $context = stream_context_create(['socket' => ['tcp_nodelay' => true]]);
+        $context = stream_context_create(['socket' => ['tcp_nodelay' => true, 'backlog' => 4096]]);
         $server  = stream_socket_server(
             sprintf('tcp://%s:%d', $this->host, $this->port),
             $errno,
@@ -84,6 +89,15 @@ final readonly class Server
                         if ($conn === false) {
                             // Accept interrupted — scope is being cancelled
                             break;
+                        }
+
+                        // TCP_NODELAY is not inherited from the listening socket on Linux.
+                        // Without it, Nagle's algorithm + client delayed-ACK (~40 ms) adds
+                        // ~39 ms latency per keep-alive response when the emitter does
+                        // multiple small fwrite() calls (status line, headers, body).
+                        $sock = socket_import_stream($conn);
+                        if ($sock !== false) {
+                            socket_set_option($sock, SOL_TCP, TCP_NODELAY, 1);
                         }
 
                         $scope->spawn($connectionHandler, $conn, $peerName);

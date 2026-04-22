@@ -10,7 +10,6 @@ use Mezzio\Async\Http\Server;
 use Mezzio\Async\Http\StaticFileHandler;
 use Psr\Container\ContainerInterface;
 use Psr\Http\Server\RequestHandlerInterface;
-use Psr\Log\LoggerInterface;
 
 final readonly class AsyncRunnerFactory
 {
@@ -21,7 +20,6 @@ final readonly class AsyncRunnerFactory
             parser:      $container->get(RequestParser::class),
             emitter:     $container->get(ResponseEmitter::class),
             staticFiles: $container->get(StaticFileHandler::class),
-            logger:      $container->get(LoggerInterface::class),
             server:      $container->get(Server::class),
         );
     }

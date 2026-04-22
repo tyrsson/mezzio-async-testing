@@ -45,25 +45,23 @@ final readonly class ResponseEmitter
             }
         }
 
-        // Use @ to suppress broken-pipe warnings — the return value tells us if the write failed.
-        if (@fwrite($socket, sprintf(
+        // Build entire header block in one string — single fwrite avoids multiple
+        // small TCP packets per response (Nagle + delayed-ACK interaction with TCP_NODELAY).
+        $head = sprintf(
             "HTTP/%s %d %s\r\n",
             $response->getProtocolVersion(),
             $response->getStatusCode(),
             $response->getReasonPhrase(),
-        )) === false) {
-            return false;
-        }
+        );
 
         foreach ($response->getHeaders() as $name => $values) {
             foreach ($values as $value) {
-                if (@fwrite($socket, "{$name}: {$value}\r\n") === false) {
-                    return false;
-                }
+                $head .= "{$name}: {$value}\r\n";
             }
         }
+        $head .= "\r\n";
 
-        if (@fwrite($socket, "\r\n") === false) {
+        if (@fwrite($socket, $head) === false) {
             return false;
         }
 
